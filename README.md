@@ -118,6 +118,28 @@ grid.show()
 
 ![Arranged Grid Example](images/arrange_example.svg)
 
+### 4. Customizing Themes & Fonts
+
+You can use `letspubpy`'s built-in `theme_pubr()` or any of Lets-Plot's standard themes (like `theme_minimal()`, `theme_bw()`, `theme_classic()`, `theme_void()`, etc.) in two ways:
+
+#### A. Pass the theme to the plotting function directly:
+```python
+# Pass theme_minimal() using the ggtheme parameter
+p_minimal = lpp.ggboxplot(
+    df, x='group', y='expression',
+    fill='group', palette='npg', 
+    ggtheme=lpp.theme_minimal()
+)
+p_minimal.show()
+```
+
+#### B. Override using the `+` operator:
+```python
+# Create with default theme_pubr() and override using the standard + operator
+p_bw = lpp.ggboxplot(df, x='group', y='expression', fill='group') + lpp.theme_bw()
+p_bw.show()
+```
+
 ---
 
 ## API Documentation
