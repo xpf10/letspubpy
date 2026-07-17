@@ -21,11 +21,22 @@ A publication-ready plotting library that wraps **Lets-Plot** in Python, mimicki
 You can install `letspubpy` in your project with `uv` or `pip`:
 
 ```bash
-# With uv
-uv add letspubpy
-
-# With pip
+# Install directly from the local folder
 pip install .
+
+# Or with uv
+uv add .
+```
+
+### Install from GitHub Releases
+You can download the pre-built wheel (`.whl`) or source distribution from the [GitHub Releases Page](https://github.com/xpf10/letspubpy/releases) and install it directly:
+
+```bash
+# Install from the downloaded wheel
+pip install letspubpy-0.1.0-py3-none-any.whl
+
+# Or install directly via the release download URL
+pip install https://github.com/xpf10/letspubpy/releases/download/v0.1.0/letspubpy-0.1.0-py3-none-any.whl
 ```
 
 ---
