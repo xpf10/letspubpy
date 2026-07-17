@@ -159,6 +159,8 @@ All plotting functions support standard parameters (`color`, `fill`, `palette`, 
 ### Themes & Color Palettes
 - `theme_pubr(base_size=12, base_family=None, legend="top", border=False)`: Custom clean publication-ready theme.
 - `scale_color_pubr(palette="npg")` & `scale_fill_pubr(palette="npg")`: Use journal color palettes (`npg`, `aaas`, `nejm`, `jama`, `jco`, `lancet`, `locuszoom`, `simpsons`, `tron`).
+- `theme_prism(palette="black_and_white", base_size=14, base_family="sans", base_fontface="bold", border=False)`: Custom GraphPad Prism-like theme.
+- `scale_color_prism(palette="colors")`, `scale_fill_prism(palette="colors")`, & `scale_shape_prism(palette="default")`: GraphPad Prism-like color, fill, and shape scales.
 
 ### Statistics & Layouts
 - `stat_compare_means(comparisons=None, method="wilcoxon", paired=False, label="p.format", size=None, symnum_args=None, ...)`: Add statistical significance brackets (if `comparisons` is provided) or a global label (ANOVA/Kruskal-Wallis) to the plot.

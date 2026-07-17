@@ -20,6 +20,7 @@ from .plots import (
 from .theme import theme_pubr, scale_color_pubr, scale_fill_pubr
 from .stats import stat_compare_means, add_stat_compare_means
 from .arrange import ggarrange
+from .prism import theme_prism, scale_color_prism, scale_colour_prism, scale_fill_prism, scale_shape_prism
 
 # Dynamically construct __all__ to include lets_plot's original exports (with ggplot overridden) and our new functions
 import lets_plot as _lp
@@ -31,5 +32,6 @@ __all__.extend([
     'ggplot', 'PubPlotSpec', 'ggboxplot', 'ggviolin', 'ggdotplot', 'ggstripchart',
     'ggbarplot', 'ggline', 'ggscatter', 'gghistogram', 'ggdensity', 'ggpie',
     'ggdonutchart', 'theme_pubr', 'scale_color_pubr', 'scale_fill_pubr',
-    'stat_compare_means', 'add_stat_compare_means', 'ggarrange'
+    'stat_compare_means', 'add_stat_compare_means', 'ggarrange',
+    'theme_prism', 'scale_color_prism', 'scale_colour_prism', 'scale_fill_prism', 'scale_shape_prism'
 ])

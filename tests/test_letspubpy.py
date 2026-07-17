@@ -107,3 +107,15 @@ def test_ggarrange(sample_data):
     assert isinstance(grid, SupPlotsSpec)
     grid_dict = grid.as_dict()
     assert grid_dict['kind'] == 'subplots'
+
+def test_prism(sample_data):
+    # Test theme_prism
+    t = lpp.theme_prism(palette="black_and_white", base_size=12, border=True)
+    assert isinstance(t, FeatureSpec)
+    
+    # Test scale_color_prism and scale_fill_prism
+    p = lpp.ggboxplot(sample_data, x='group', y='value', fill='group') + \
+        lpp.theme_prism() + \
+        lpp.scale_fill_prism(palette="candy_bright") + \
+        lpp.scale_color_prism(palette="candy_bright")
+    assert isinstance(p, lpp.PubPlotSpec)
