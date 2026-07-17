@@ -62,18 +62,32 @@ def test_stat_compare_means(sample_data):
     bracket = lpp.stat_compare_means(sample_data, x='group', y='value', comparisons=[('A', 'B'), ('B', 'C')])
     assert isinstance(bracket, FeatureSpec)
     
-    # Test + addition
+    # Test + addition with size and custom symnum_args
     p = lpp.ggboxplot(sample_data, x='group', y='value')
-    p2 = p + lpp.stat_compare_means(comparisons=[('A', 'B')])
+    p2 = p + lpp.stat_compare_means(
+        comparisons=[('A', 'B')], 
+        size=15, 
+        label="p.signif",
+        symnum_args={"cutpoints": [0, 0.01, 1], "symbols": ["significant", "ns"]}
+    )
     p2_dict = p2.as_dict()
     bracket_layers = [l for l in p2_dict['layers'] if l.get('geom') == 'bracket']
     assert len(bracket_layers) > 0
+    assert bracket_layers[0].get('size') == 15
     
-    # Global comparison test
-    p3 = p + lpp.stat_compare_means(method='anova')
+    # Test + addition with explicit list labels
+    p_custom = p + lpp.stat_compare_means(comparisons=[('A', 'B'), ('B', 'C')], label=["diff1", "diff2"])
+    p_custom_dict = p_custom.as_dict()
+    custom_layers = [l for l in p_custom_dict['layers'] if l.get('geom') == 'bracket']
+    assert len(custom_layers) > 0
+    assert "diff1" in custom_layers[0].get('data').get('label').values
+    
+    # Global comparison test with size
+    p3 = p + lpp.stat_compare_means(method='anova', size=12)
     p3_dict = p3.as_dict()
     text_layers = [l for l in p3_dict['layers'] if l.get('geom') == 'text']
     assert len(text_layers) > 0
+    assert text_layers[0].get('size') == 12
 
 def test_ggpie():
     df = pd.DataFrame({

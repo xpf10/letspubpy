@@ -33,12 +33,23 @@ def extract_data_and_mapping(plot):
                 
     return data, mapping
 
-def format_p_value(p, format_type="p.format", hide_ns=False):
-    """Format p-value as scientific/decimal format or as significance asterisks."""
+def format_p_value(p, format_type="p.format", hide_ns=False, symnum_args=None):
+    """Format p-value as scientific/decimal format or as significance asterisks/custom symbols."""
     if np.isnan(p):
         return "ns" if not hide_ns else ""
         
     if format_type == "p.signif":
+        if symnum_args is not None:
+            cutpoints = symnum_args.get("cutpoints", [0, 0.0001, 0.001, 0.01, 0.05, 1])
+            symbols = symnum_args.get("symbols", ["****", "***", "**", "*", "ns"])
+            for i in range(len(cutpoints) - 1):
+                if cutpoints[i] <= p <= cutpoints[i+1]:
+                    symbol = symbols[i]
+                    if symbol == "ns" and hide_ns:
+                        return ""
+                    return symbol
+            return "ns" if not hide_ns else ""
+            
         if p > 0.05:
             return "ns" if not hide_ns else ""
         elif p <= 0.0001:
@@ -140,13 +151,13 @@ def calculate_bracket_positions(data, y_col, comparisons, label_y=None, step_inc
             
     return positions
 
-def make_global_label(data, x_col, y_col, method="kruskal", label_x=None, label_y=None, label="p.format"):
+def make_global_label(data, x_col, y_col, method="kruskal", label_x=None, label_y=None, label="p.format", size=None, symnum_args=None):
     """Create a geom_text layer displaying global test statistics (ANOVA/Kruskal-Wallis)."""
     p, name = compute_stats_global(data, x_col, y_col, method=method)
     if np.isnan(p):
         return None
         
-    p_str = format_p_value(p, format_type=label)
+    p_str = format_p_value(p, format_type=label, symnum_args=symnum_args)
     label_text_str = f"{name}, {p_str}"
     
     y_min = data[y_col].min()
@@ -159,11 +170,11 @@ def make_global_label(data, x_col, y_col, method="kruskal", label_x=None, label_
     if label_y is None:
         label_y = y_max + 0.02 * y_range
         
-    return geom_text(x=label_x, y=label_y, label=label_text_str, hjust=0, vjust=0, size=11)
+    return geom_text(x=label_x, y=label_y, label=label_text_str, hjust=0, vjust=0, size=size or 11)
 
 def add_stat_compare_means(plot, comparisons=None, method="wilcoxon", paired=False,
                            label="p.format", label_x=None, label_y=None,
-                           step_increase=0.08, hide_ns=False, **kwargs):
+                           step_increase=0.08, hide_ns=False, size=None, symnum_args=None, **kwargs):
     """Add a statistical comparison layer directly to a PlotSpec object."""
     data, mapping = extract_data_and_mapping(plot)
     if data is None or mapping is None:
@@ -197,19 +208,26 @@ def add_stat_compare_means(plot, comparisons=None, method="wilcoxon", paired=Fal
             
         positions = calculate_bracket_positions(data, y_col, valid_comparisons, label_y=label_y, step_increase=step_increase)
         
+        if isinstance(label, list):
+            if len(label) != len(valid_comparisons):
+                raise ValueError("Length of custom label list must match the number of comparisons.")
+            labels = label
+        else:
+            labels = [format_p_value(p, format_type=label, hide_ns=hide_ns, symnum_args=symnum_args) for p in p_values]
+            
         bracket_df = pd.DataFrame({
             'xmin': [c[0] for c in valid_comparisons],
             'xmax': [c[1] for c in valid_comparisons],
             'y': positions,
-            'label': [format_p_value(p, format_type=label, hide_ns=hide_ns) for p in p_values]
+            'label': labels
         })
         
         # Prepare bracket parameters
         br_params = {}
+        if size is not None:
+            br_params['size'] = size
         if 'color' in kwargs:
             br_params['color'] = kwargs['color']
-        if 'size' in kwargs:
-            br_params['size'] = kwargs['size']
         if 'segment_color' in kwargs:
             br_params['segment_color'] = kwargs['segment_color']
         if 'segment_size' in kwargs:
@@ -220,14 +238,15 @@ def add_stat_compare_means(plot, comparisons=None, method="wilcoxon", paired=Fal
     else:
         # Global comparison
         global_method = "kruskal.test" if method.lower() in ["wilcoxon", "wilcox", "mwu", "mannwhitneyu", "kruskal", "kruskal.test"] else "anova"
-        layer = make_global_label(data, x_col, y_col, method=global_method, label_x=label_x, label_y=label_y, label=label)
+        label_fmt = label if isinstance(label, str) else "p.format"
+        layer = make_global_label(data, x_col, y_col, method=global_method, label_x=label_x, label_y=label_y, label=label_fmt, size=size, symnum_args=symnum_args)
         if layer is not None:
             return plot + layer
         return plot
 
 class StatCompareMeansAdder:
     """Helper class to allow adding stat_compare_means to PubPlotSpec using + operator."""
-    def __init__(self, comparisons, method, paired, label, label_x, label_y, step_increase, hide_ns, kwargs):
+    def __init__(self, comparisons, method, paired, label, label_x, label_y, step_increase, hide_ns, size, symnum_args, kwargs):
         self.comparisons = comparisons
         self.method = method
         self.paired = paired
@@ -236,6 +255,8 @@ class StatCompareMeansAdder:
         self.label_y = label_y
         self.step_increase = step_increase
         self.hide_ns = hide_ns
+        self.size = size
+        self.symnum_args = symnum_args
         self.kwargs = kwargs
         
     def __radd__(self, plot):
@@ -249,12 +270,14 @@ class StatCompareMeansAdder:
             label_y=self.label_y,
             step_increase=self.step_increase,
             hide_ns=self.hide_ns,
+            size=self.size,
+            symnum_args=self.symnum_args,
             **self.kwargs
         )
 
 def stat_compare_means(data=None, x=None, y=None, comparisons=None, method="wilcoxon", paired=False,
                        label="p.format", label_x=None, label_y=None,
-                       step_increase=0.08, hide_ns=False, **kwargs):
+                       step_increase=0.08, hide_ns=False, size=None, symnum_args=None, **kwargs):
     """
     Perform statistical tests and add p-values or significance asterisks to the plot.
     
@@ -274,6 +297,8 @@ def stat_compare_means(data=None, x=None, y=None, comparisons=None, method="wilc
             label_y=label_y,
             step_increase=step_increase,
             hide_ns=hide_ns,
+            size=size,
+            symnum_args=symnum_args,
             kwargs=kwargs
         )
     else:
@@ -300,18 +325,25 @@ def stat_compare_means(data=None, x=None, y=None, comparisons=None, method="wilc
                 
             positions = calculate_bracket_positions(data, y_clean, valid_comparisons, label_y=label_y, step_increase=step_increase)
             
+            if isinstance(label, list):
+                if len(label) != len(valid_comparisons):
+                    raise ValueError("Length of custom label list must match the number of comparisons.")
+                labels = label
+            else:
+                labels = [format_p_value(p, format_type=label, hide_ns=hide_ns, symnum_args=symnum_args) for p in p_values]
+                
             bracket_df = pd.DataFrame({
                 'xmin': [c[0] for c in valid_comparisons],
                 'xmax': [c[1] for c in valid_comparisons],
                 'y': positions,
-                'label': [format_p_value(p, format_type=label, hide_ns=hide_ns) for p in p_values]
+                'label': labels
             })
             
             br_params = {}
+            if size is not None:
+                br_params['size'] = size
             if 'color' in kwargs:
                 br_params['color'] = kwargs['color']
-            if 'size' in kwargs:
-                br_params['size'] = kwargs['size']
             if 'segment_color' in kwargs:
                 br_params['segment_color'] = kwargs['segment_color']
             if 'segment_size' in kwargs:
@@ -320,7 +352,8 @@ def stat_compare_means(data=None, x=None, y=None, comparisons=None, method="wilc
             return geom_bracket(aes(xmin='xmin', xmax='xmax', y='y', label='label'), data=bracket_df, **br_params)
         else:
             global_method = "kruskal.test" if method.lower() in ["wilcoxon", "wilcox", "mwu", "mannwhitneyu", "kruskal", "kruskal.test"] else "anova"
-            layer = make_global_label(data, x_clean, y_clean, method=global_method, label_x=label_x, label_y=label_y, label=label)
+            label_fmt = label if isinstance(label, str) else "p.format"
+            layer = make_global_label(data, x_clean, y_clean, method=global_method, label_x=label_x, label_y=label_y, label=label_fmt, size=size, symnum_args=symnum_args)
             if layer is not None:
                 return layer
             return geom_blank()

@@ -139,7 +139,10 @@ All plotting functions support standard parameters (`color`, `fill`, `palette`, 
 - `scale_color_pubr(palette="npg")` & `scale_fill_pubr(palette="npg")`: Use journal color palettes (`npg`, `aaas`, `nejm`, `jama`, `jco`, `lancet`, `locuszoom`, `simpsons`, `tron`).
 
 ### Statistics & Layouts
-- `stat_compare_means(comparisons=None, method="wilcoxon", paired=False, label="p.format", ...)`: Add statistical significance brackets (if `comparisons` is provided) or a global label (ANOVA/Kruskal-Wallis) to the plot.
+- `stat_compare_means(comparisons=None, method="wilcoxon", paired=False, label="p.format", size=None, symnum_args=None, ...)`: Add statistical significance brackets (if `comparisons` is provided) or a global label (ANOVA/Kruskal-Wallis) to the plot.
+  - `size`: Configure the font size of the significance labels.
+  - `symnum_args`: Customize significance thresholds/symbols via a dict, e.g. `{"cutpoints": [0, 0.01, 1], "symbols": ["significant", "ns"]}`.
+  - `label`: Can be `"p.format"`, `"p.signif"`, or a list of custom string labels matching the comparisons (e.g. `["Group A vs B", "Group B vs C"]`).
 - `ggarrange(*plots, ncol=None, nrow=None, common_legend=False, legend="bottom")`: Combine multiple plots on a grid.
 
 ---
