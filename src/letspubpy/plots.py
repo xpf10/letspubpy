@@ -18,15 +18,22 @@ from lets_plot import (
     geom_polygon,
     geom_text,
     geom_blank,
+    geom_tile,
+    geom_qq,
+    geom_qq2,
+    geom_qq_line,
+    geom_qq2_line,
+    stat_ecdf,
     coord_fixed,
     position_dodge,
     aes,
     ggtitle,
-    xlab,
-    ylab,
+    xlab as _xlab,
+    ylab as _ylab,
     scale_x_discrete,
     scale_y_continuous,
     scale_x_continuous,
+    scale_fill_gradient2,
     theme,
     layer_labels
 )
@@ -80,9 +87,9 @@ def apply_labels_and_theme(p, title=None, xlab_str=None, ylab_str=None, order=No
     if title:
         p += ggtitle(title)
     if xlab_str is not None:
-        p += xlab(xlab_str)
+        p += _xlab(xlab_str)
     if ylab_str is not None:
-        p += ylab(ylab_str)
+        p += _ylab(ylab_str)
         
     if order is not None:
         p += scale_x_discrete(limits=order)
@@ -939,3 +946,394 @@ def ggpie(data, x, label, fill=None, palette="npg", size=None, hole=0.0, title=N
 def ggdonutchart(data, x, label, fill=None, palette="npg", size=None, hole=0.4, title=None, show_legend=True, ggtheme=None):
     """Create a publication-ready donut chart."""
     return ggpie(data, x, label, fill=fill, palette=palette, size=size, hole=hole, title=title, show_legend=show_legend, ggtheme=ggtheme)
+
+
+# ==============================================================================
+# ggqqplot — Q-Q plot for normality testing
+# ==============================================================================
+
+def ggqqplot(data, x, color="black", fill=None, palette="npg", shape=19, size=3,
+              add="none", add_params=None,
+              title=None, xlab=None, ylab=None,
+              show_legend=True, ggtheme=None):
+    """Create a publication-ready Q-Q plot to assess normality.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Input data.
+    x : str
+        Column name for the variable to test.
+    color : str
+        Column name or constant color for point outlines.
+    fill : str
+        Column name or constant color for point fills.
+    palette : str
+        Color palette name.
+    shape : int
+        Point shape.
+    size : float
+        Point size.
+    add : str or list
+        Additional layers: ``"qqline"`` for reference line.
+    add_params : dict
+        Extra parameters for the ``add`` layer.
+    title, xlab, ylab : str
+        Labels.
+    show_legend : bool
+        Whether to show the legend.
+    ggtheme : object
+        Custom theme.
+    """
+    df = data.copy()
+    mapping = aes(sample=x)
+    geom_mapping, geom_params = get_color_fill_aes_and_params(df, color, fill)
+
+    p = ggplot(df, mapping)
+
+    pt_params = {'shape': shape, 'size': size}
+    pt_params.update(geom_params)
+    p += geom_qq(aes(**geom_mapping), **pt_params)
+
+    if add != "none":
+        if isinstance(add, str):
+            add = [add]
+        for item in add:
+            item_params = add_params.copy() if add_params else {}
+            if item == "qqline" or item == "line":
+                p += geom_qq_line(aes(**geom_mapping), **item_params)
+            elif item == "qq2line" or item == "line2":
+                p += geom_qq2_line(aes(**geom_mapping), **item_params)
+
+    if 'color' in geom_mapping:
+        p += scale_color_pubr(palette)
+    if 'fill' in geom_mapping:
+        p += scale_fill_pubr(palette)
+
+    p = apply_labels_and_theme(p, title, xlab, ylab, None, show_legend, ggtheme)
+    return p
+
+
+# ==============================================================================
+# ggecdf — Empirical cumulative distribution function plot
+# ==============================================================================
+
+def ggecdf(data, x, color="black", fill=None, palette="npg", size=1,
+            stat="ecdf",
+            title=None, xlab=None, ylab=None,
+            show_legend=True, ggtheme=None):
+    """Create a publication-ready ECDF (empirical CDF) plot.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Input data.
+    x : str
+        Column name for the variable.
+    color : str
+        Column name or constant color.
+    fill : str
+        Column name or constant color.
+    palette : str
+        Color palette name.
+    size : float
+        Line size.
+    stat : str
+        Statistic to use, default ``"ecdf"``.
+    title, xlab, ylab : str
+        Labels.
+    show_legend : bool
+        Whether to show the legend.
+    ggtheme : object
+        Custom theme.
+    """
+    df = data.copy()
+    mapping = aes(x=x)
+    geom_mapping, geom_params = get_color_fill_aes_and_params(df, color, fill)
+
+    p = ggplot(df, mapping)
+
+    ecdf_params = {'stat': stat}
+    if size is not None:
+        ecdf_params['size'] = size
+    ecdf_params.update(geom_params)
+
+    from lets_plot import geom_step
+    p += geom_step(aes(**geom_mapping), **ecdf_params)
+
+    if 'color' in geom_mapping:
+        p += scale_color_pubr(palette)
+    if 'fill' in geom_mapping:
+        p += scale_fill_pubr(palette)
+
+    p = apply_labels_and_theme(p, title, xlab, ylab, None, show_legend, ggtheme)
+    return p
+
+
+# ==============================================================================
+# ggcorr — Correlation heatmap
+# ==============================================================================
+
+def _compute_correlation_matrix(df, method="pearson", digits=2, p_low="", p_high=""):
+    """Compute a correlation matrix and p-value matrix.
+
+    Returns (cor_df, p_df) where cor_df has correlation values and
+    p_df has p-values, both in long format suitable for geom_tile.
+    """
+    var_cols = [c for c in df.columns if df[c].dtype in ('float64', 'int64', 'float32', 'int32')]
+    n = len(var_cols)
+    cor_matrix = np.zeros((n, n))
+    p_matrix = np.zeros((n, n))
+
+    for i in range(n):
+        for j in range(n):
+            if i == j:
+                cor_matrix[i, j] = 1.0
+                p_matrix[i, j] = np.nan
+            else:
+                x = df[var_cols[i]].values.astype(float)
+                y = df[var_cols[j]].values.astype(float)
+                mask = ~np.isnan(x) & ~np.isnan(y)
+                x_clean, y_clean = x[mask], y[mask]
+                if len(x_clean) < 3:
+                    cor_matrix[i, j] = np.nan
+                    p_matrix[i, j] = np.nan
+                    continue
+
+                method_lower = method.lower()
+                if method_lower == "pearson":
+                    r, p = _scipy_stats.pearsonr(x_clean, y_clean)
+                elif method_lower == "spearman":
+                    r, p = _scipy_stats.spearmanr(x_clean, y_clean)
+                elif method_lower == "kendall":
+                    r, p = _scipy_stats.kendalltau(x_clean, y_clean)
+                else:
+                    raise ValueError(f"Unknown correlation method: {method}")
+                cor_matrix[i, j] = r
+                p_matrix[i, j] = p
+
+    rows = []
+    p_rows = []
+    for i in range(n):
+        for j in range(n):
+            val = cor_matrix[i, j]
+            pval = p_matrix[i, j]
+            if np.isnan(val):
+                label = "NA"
+            else:
+                rounded = round(val, digits)
+                if i == j:
+                    label = str(rounded)
+                elif not np.isnan(pval):
+                    p_str = f"{pval:.2g}"
+                    if p_low and pval < 0.05:
+                        label = f"{rounded}\n{p_low}{p_str}"
+                    elif p_high and pval >= 0.05:
+                        label = f"{rounded}\n{p_high}{p_str}"
+                    else:
+                        label = str(rounded)
+                else:
+                    label = str(rounded)
+            rows.append({"Var1": var_cols[i], "Var2": var_cols[j],
+                          "cor": val, "label": label})
+            p_rows.append({"Var1": var_cols[i], "Var2": var_cols[j],
+                           "p": pval})
+
+    cor_df = pd.DataFrame(rows)
+    p_df = pd.DataFrame(p_rows)
+    return cor_df, p_df, var_cols
+
+
+def ggcorr(data, method="pearson", digits=2, p_low="", p_high="",
+            cor_mat=None, p_mat=None,
+            title=None, show_legend=True, ggtheme=None):
+    """Create a publication-ready correlation heatmap.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Input data (numeric columns will be used).
+    method : str
+        Correlation method: ``"pearson"``, ``"spearman"``, or ``"kendall"``.
+    digits : int
+        Number of decimal places for correlation labels.
+    p_low : str
+        Symbol prefix for p < 0.05 (e.g. ``"*"``).
+    p_high : str
+        Symbol prefix for p >= 0.05 (e.g. ``"ns"``).
+    cor_mat : pd.DataFrame, optional
+        Pre-computed correlation matrix in long format.
+    p_mat : pd.DataFrame, optional
+        Pre-computed p-value matrix in long format.
+    title : str
+        Plot title.
+    show_legend : bool
+        Whether to show the legend.
+    ggtheme : object
+        Custom theme.
+    """
+    if cor_mat is None:
+        cor_df, p_df, var_cols = _compute_correlation_matrix(
+            data, method=method, digits=digits,
+            p_low=p_low, p_high=p_high
+        )
+    else:
+        cor_df = cor_mat
+        var_cols = sorted(set(cor_df["Var1"].unique()) | set(cor_df["Var2"].unique()))
+
+    mapping = aes(x="Var1", y="Var2", fill="cor")
+    p = ggplot(cor_df, mapping)
+
+    p += geom_tile(aes(x="Var1", y="Var2", fill="cor"), color="white", size=0.5)
+
+    p += geom_text(aes(x="Var1", y="Var2", label="label"),
+                   data=cor_df, color="black", size=4)
+
+    p += scale_fill_gradient2(low="#B2182B", mid="#F7F7F7", high="#2166AC",
+                              midpoint=0, limits=[-1, 1])
+
+    p += scale_x_discrete(limits=var_cols)
+    p += scale_x_discrete(limits=var_cols)
+
+    theme_obj = ggtheme if ggtheme is not None else theme_pubr()
+    if not show_legend:
+        theme_obj += theme(legend_position='none')
+    p += theme_obj
+
+    if title:
+        p += ggtitle(title)
+
+    return p
+
+
+# ==============================================================================
+# rremove — Remove plot elements
+# ==============================================================================
+
+def rremove(plot, what):
+    """Remove plot elements (axes, titles, legends, etc.).
+
+    Parameters
+    ----------
+    plot : PlotSpec
+        The plot to modify.
+    what : str
+        Element to remove. One of:
+        - ``"title"``, ``"subtitle"``
+        - ``"xlab"``, ``"ylab"``
+        - ``"x.text"``, ``"y.text"`` (axis tick labels)
+        - ``"x.ticks"``, ``"y.ticks"`` (axis tick marks)
+        - ``"x.axis"``, ``"y.axis"`` (axis lines)
+        - ``"axis"`` (both axes)
+        - ``"legend"``, ``"legend.title"``
+        - ``"grid"``
+        - ``"panel.grid"``
+    """
+    theme_mods = {}
+    what_lower = what.lower()
+
+    if what_lower in ("title", "plot.title"):
+        return plot + theme(plot_title="blank")
+    elif what_lower in ("subtitle", "plot.subtitle"):
+        return plot + theme(plot_subtitle="blank")
+    elif what_lower in ("xlab", "axis.title.x"):
+        return plot + theme(axis_title_x="blank")
+    elif what_lower in ("ylab", "axis.title.y"):
+        return plot + theme(axis_title_y="blank")
+    elif what_lower in ("x.text", "axis.text.x"):
+        return plot + theme(axis_text_x="blank")
+    elif what_lower in ("y.text", "axis.text.y"):
+        return plot + theme(axis_text_y="blank")
+    elif what_lower in ("x.ticks", "axis.ticks.x"):
+        return plot + theme(axis_ticks_x="blank")
+    elif what_lower in ("y.ticks", "axis.ticks.y"):
+        return plot + theme(axis_ticks_y="blank")
+    elif what_lower in ("x.axis", "axis.line.x"):
+        return plot + theme(axis_line_x="blank")
+    elif what_lower in ("y.axis", "axis.line.y"):
+        return plot + theme(axis_line_y="blank")
+    elif what_lower == "axis":
+        return plot + theme(
+            axis_line_x="blank", axis_line_y="blank",
+            axis_ticks_x="blank", axis_ticks_y="blank",
+            axis_title_x="blank", axis_title_y="blank",
+            axis_text_x="blank", axis_text_y="blank"
+        )
+    elif what_lower in ("legend", "legend.position"):
+        return plot + theme(legend_position="none")
+    elif what_lower == "legend.title":
+        return plot + theme(legend_title="blank")
+    elif what_lower in ("grid", "panel.grid"):
+        return plot + theme(panel_grid_major="blank", panel_grid_minor="blank")
+    elif what_lower in ("panel", "panel.background"):
+        return plot + theme(panel_background="blank")
+    else:
+        raise ValueError(f"Unknown element to remove: {what}")
+
+
+# ==============================================================================
+# ggpar — Generic plot modifier
+# ==============================================================================
+
+def ggpar(plot, title=None, xlab=None, ylab=None,
+          font_main=None, font_x=None, font_y=None,
+          legend=None, legend_title=None,
+          palette=None,
+          show_legend=None,
+          font_size=None):
+    """Customize an existing plot's appearance.
+
+    Parameters
+    ----------
+    plot : PlotSpec
+        The plot to modify.
+    title : str
+        New title.
+    xlab : str
+        New x-axis label.
+    ylab : str
+        New y-axis label.
+    font_main : int
+        Title font size.
+    font_x : int
+        X-axis label font size.
+    font_y : int
+        Y-axis label font size.
+    legend : str
+        Legend position: ``"right"``, ``"left"``, ``"top"``, ``"bottom"``, ``"none"``.
+    legend_title : str
+        Legend title text.
+    palette : str
+        Color palette name to apply.
+    show_legend : bool
+        Whether to show the legend.
+    font_size : int
+        Base font size.
+    """
+    if title is not None:
+        plot = plot + ggtitle(title)
+    if xlab is not None:
+        plot = plot + _xlab(xlab)
+    if ylab is not None:
+        plot = plot + _ylab(ylab)
+
+    if palette is not None:
+        plot = plot + scale_color_pubr(palette) + scale_fill_pubr(palette)
+
+    if show_legend is False:
+        plot = plot + theme(legend_position="none")
+    elif legend is not None:
+        plot = plot + theme(legend_position=legend)
+
+    if legend_title is not None:
+        plot = plot + theme(legend_title=legend_title)
+
+    theme_args = {}
+    if font_size is not None:
+        theme_args["base_size"] = font_size
+
+    if theme_args:
+        base_theme = theme_pubr(**theme_args)
+        plot = plot + base_theme
+
+    return plot

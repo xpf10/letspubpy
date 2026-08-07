@@ -933,3 +933,417 @@ def test_pubplotspec_radd():
 def test_ggplot_returns_pubplotspec():
     p = lpp.ggplot(pd.DataFrame({"x": [1], "y": [2]}), lpp.aes(x="x", y="y"))
     assert isinstance(p, lpp.PubPlotSpec)
+
+
+# ==============================================================================
+# stat_cor tests
+# ==============================================================================
+
+def test_stat_cor_standalone():
+    """stat_cor should return a FeatureSpec for geom_text."""
+    result = lpp.stat_cor(data=pd.DataFrame({"x": [1, 2, 3], "y": [2, 4, 6]}),
+                          x="x", y="y")
+    assert isinstance(result, FeatureSpec)
+    d = result.as_dict()
+    assert d.get("geom") == "text"
+
+def test_stat_cor_operator(scatter_data):
+    """stat_cor should be usable with the + operator."""
+    p = lpp.ggscatter(scatter_data, x="x", y="y", color="group")
+    p2 = p + lpp.stat_cor(data=scatter_data, x="x", y="y", method="pearson")
+    assert isinstance(p2, lpp.PubPlotSpec)
+
+def test_stat_cor_spearman(scatter_data):
+    p = lpp.ggscatter(scatter_data, x="x", y="y", color="group")
+    p2 = p + lpp.stat_cor(data=scatter_data, x="x", y="y", method="spearman")
+    assert isinstance(p2, lpp.PubPlotSpec)
+
+def test_stat_cor_custom_label():
+    result = lpp.stat_cor(
+        data=pd.DataFrame({"x": [1, 2, 3], "y": [3, 1, 2]}),
+        x="x", y="y", label="R={R}\np={p}", size=10
+    )
+    d = result.as_dict()
+    assert d.get("geom") == "text"
+
+def test_stat_cor_invalid_method():
+    with pytest.raises(ValueError):
+        lpp.stat_cor(
+            data=pd.DataFrame({"x": [1, 2, 3], "y": [2, 4, 6]}),
+            x="x", y="y", method="invalid_method"
+        )
+
+
+# ==============================================================================
+# stat_regline_equation tests
+# ==============================================================================
+
+def test_stat_regline_equation_standalone():
+    result = lpp.stat_regline_equation(
+        data=pd.DataFrame({"x": [1, 2, 3, 4], "y": [2, 4, 5, 7]}),
+        x="x", y="y"
+    )
+    assert isinstance(result, FeatureSpec)
+    d = result.as_dict()
+    assert d.get("geom") == "text"
+
+def test_stat_regline_equation_operator(scatter_data):
+    p = lpp.ggscatter(scatter_data, x="x", y="y")
+    p2 = p + lpp.stat_regline_equation(data=scatter_data, x="x", y="y")
+    assert isinstance(p2, lpp.PubPlotSpec)
+
+def test_stat_regline_equation_custom_label():
+    result = lpp.stat_regline_equation(
+        data=pd.DataFrame({"x": [1, 2, 3], "y": [2, 4, 6]}),
+        x="x", y="y", label="y = {a}x + {b}", size=8
+    )
+    assert isinstance(result, FeatureSpec)
+
+
+# ==============================================================================
+# ggqqplot tests
+# ==============================================================================
+
+def test_ggqqplot_basic():
+    np.random.seed(42)
+    df = pd.DataFrame({"val": np.random.normal(0, 1, 100)})
+    p = lpp.ggqqplot(df, x="val")
+    assert isinstance(p, lpp.PubPlotSpec)
+
+def test_ggqqplot_with_line():
+    np.random.seed(42)
+    df = pd.DataFrame({"val": np.random.normal(0, 1, 100)})
+    p = lpp.ggqqplot(df, x="val", add="qqline")
+    assert isinstance(p, lpp.PubPlotSpec)
+    layers = p.as_dict().get("layers", [])
+    geoms = [l.get("geom") for l in layers]
+    assert "point" in geoms or "qq" in str(geoms)
+
+def test_ggqqplot_color_fill():
+    np.random.seed(42)
+    df = pd.DataFrame({
+        "val": np.concatenate([
+            np.random.normal(0, 1, 50),
+            np.random.normal(2, 1, 50)
+        ]),
+        "group": ["A"] * 50 + ["B"] * 50
+    })
+    p = lpp.ggqqplot(df, x="val", color="group", fill="group")
+    assert isinstance(p, lpp.PubPlotSpec)
+
+def test_ggqqplot_custom_theme():
+    np.random.seed(42)
+    df = pd.DataFrame({"val": np.random.normal(0, 1, 100)})
+    p = lpp.ggqqplot(df, x="val", title="Q-Q Test", xlab="Theoretical", ylab="Sample")
+    assert isinstance(p, lpp.PubPlotSpec)
+
+
+# ==============================================================================
+# ggecdf tests
+# ==============================================================================
+
+def test_ggecdf_basic():
+    np.random.seed(42)
+    df = pd.DataFrame({"val": np.random.normal(0, 1, 100)})
+    p = lpp.ggecdf(df, x="val")
+    assert isinstance(p, lpp.PubPlotSpec)
+
+def test_ggecdf_with_groups():
+    np.random.seed(42)
+    df = pd.DataFrame({
+        "val": np.concatenate([
+            np.random.normal(0, 1, 50),
+            np.random.normal(2, 1, 50)
+        ]),
+        "group": ["A"] * 50 + ["B"] * 50
+    })
+    p = lpp.ggecdf(df, x="val", color="group")
+    assert isinstance(p, lpp.PubPlotSpec)
+
+def test_ggecdf_custom_theme():
+    np.random.seed(42)
+    df = pd.DataFrame({"val": np.random.normal(0, 1, 100)})
+    p = lpp.ggecdf(df, x="val", title="ECDF Plot", xlab="Value", ylab="ECDF")
+    assert isinstance(p, lpp.PubPlotSpec)
+
+
+# ==============================================================================
+# ggcorr tests
+# ==============================================================================
+
+def test_ggcorr_basic():
+    np.random.seed(42)
+    df = pd.DataFrame({
+        "x": np.random.normal(0, 1, 50),
+        "y": np.random.normal(0, 1, 50),
+        "z": np.random.normal(0, 1, 50),
+    })
+    p = lpp.ggcorr(df, method="pearson")
+    assert isinstance(p, lpp.PubPlotSpec)
+
+def test_ggcorr_spearman():
+    np.random.seed(42)
+    df = pd.DataFrame({
+        "a": np.random.normal(0, 1, 30),
+        "b": np.random.normal(0, 1, 30),
+    })
+    p = lpp.ggcorr(df, method="spearman")
+    assert isinstance(p, lpp.PubPlotSpec)
+
+def test_ggcorr_kendall():
+    np.random.seed(42)
+    df = pd.DataFrame({
+        "a": np.random.normal(0, 1, 30),
+        "b": np.random.normal(0, 1, 30),
+    })
+    p = lpp.ggcorr(df, method="kendall")
+    assert isinstance(p, lpp.PubPlotSpec)
+
+def test_ggcorr_with_p_symbols():
+    np.random.seed(42)
+    df = pd.DataFrame({
+        "x": np.random.normal(0, 1, 50),
+        "y": np.random.normal(0, 1, 50),
+        "z": np.random.normal(0, 1, 50),
+    })
+    p = lpp.ggcorr(df, method="pearson", p_low="*", p_high="ns")
+    assert isinstance(p, lpp.PubPlotSpec)
+
+def test_ggcorr_custom_digits():
+    np.random.seed(42)
+    df = pd.DataFrame({
+        "a": np.random.normal(0, 1, 50),
+        "b": np.random.normal(0, 1, 50),
+    })
+    p = lpp.ggcorr(df, digits=3)
+    assert isinstance(p, lpp.PubPlotSpec)
+
+def test_ggcorr_invalid_method():
+    np.random.seed(42)
+    df = pd.DataFrame({"x": np.random.normal(0, 1, 20), "y": np.random.normal(0, 1, 20)})
+    with pytest.raises(ValueError):
+        lpp.ggcorr(df, method="invalid")
+
+
+# ==============================================================================
+# rremove tests
+# ==============================================================================
+
+def test_rremove_title():
+    p = lpp.ggscatter(pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}),
+                      x="x", y="y", title="Test")
+    p2 = lpp.rremove(p, "title")
+    assert isinstance(p2, lpp.PubPlotSpec)
+
+def test_rremove_xlab():
+    p = lpp.ggscatter(pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}),
+                      x="x", y="y", xlab="X Label")
+    p2 = lpp.rremove(p, "xlab")
+    assert isinstance(p2, lpp.PubPlotSpec)
+
+def test_rremove_ylab():
+    p = lpp.ggscatter(pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}),
+                      x="x", y="y", ylab="Y Label")
+    p2 = lpp.rremove(p, "ylab")
+    assert isinstance(p2, lpp.PubPlotSpec)
+
+def test_rremove_axis():
+    p = lpp.ggscatter(pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}), x="x", y="y")
+    p2 = lpp.rremove(p, "axis")
+    assert isinstance(p2, lpp.PubPlotSpec)
+
+def test_rremove_legend():
+    p = lpp.ggscatter(pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6], "g": ["a", "b", "c"]}),
+                      x="x", y="y", color="g")
+    p2 = lpp.rremove(p, "legend")
+    assert isinstance(p2, lpp.PubPlotSpec)
+
+def test_rremove_grid():
+    p = lpp.ggscatter(pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}), x="x", y="y")
+    p2 = lpp.rremove(p, "grid")
+    assert isinstance(p2, lpp.PubPlotSpec)
+
+def test_rremove_xtext():
+    p = lpp.ggscatter(pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}), x="x", y="y")
+    p2 = lpp.rremove(p, "x.text")
+    assert isinstance(p2, lpp.PubPlotSpec)
+
+def test_rremove_invalid():
+    p = lpp.ggscatter(pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}), x="x", y="y")
+    with pytest.raises(ValueError):
+        lpp.rremove(p, "nonexistent_element")
+
+
+# ==============================================================================
+# ggpar tests
+# ==============================================================================
+
+def test_ggpar_basic():
+    p = lpp.ggscatter(pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}), x="x", y="y")
+    p2 = lpp.ggpar(p, title="New Title", xlab="New X", ylab="New Y")
+    assert isinstance(p2, lpp.PubPlotSpec)
+
+def test_ggpar_palette():
+    df = pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6], "g": ["a", "b", "c"]})
+    p = lpp.ggscatter(df, x="x", y="y", color="g")
+    p2 = lpp.ggpar(p, palette="npg")
+    assert isinstance(p2, lpp.PubPlotSpec)
+
+def test_ggpar_legend_position():
+    df = pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6], "g": ["a", "b", "c"]})
+    p = lpp.ggscatter(df, x="x", y="y", color="g")
+    p2 = lpp.ggpar(p, legend="top")
+    assert isinstance(p2, lpp.PubPlotSpec)
+
+def test_ggpar_no_legend():
+    df = pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6], "g": ["a", "b", "c"]})
+    p = lpp.ggscatter(df, x="x", y="y", color="g")
+    p2 = lpp.ggpar(p, show_legend=False)
+    assert isinstance(p2, lpp.PubPlotSpec)
+
+
+# ==============================================================================
+# Integration tests — combining new features
+# ==============================================================================
+
+def test_ggscatter_with_stat_cor_operator(scatter_data):
+    """ggscatter + stat_cor via + operator should produce valid plot."""
+    p = lpp.ggscatter(scatter_data, x="x", y="y", color="group", size=3)
+    p2 = p + lpp.stat_cor(data=scatter_data, x="x", y="y", method="pearson", size=10)
+    assert isinstance(p2, lpp.PubPlotSpec)
+    d = p2.as_dict()
+    # Should have at least the scatter point layer and the text layer
+    geoms = [l.get("geom") for l in d.get("layers", [])]
+    assert "point" in geoms
+    assert "text" in geoms
+
+def test_ggscatter_with_stat_regline_operator(scatter_data):
+    """ggscatter + stat_regline_equation via + operator should produce valid plot."""
+    p = lpp.ggscatter(scatter_data, x="x", y="y", color="group", size=3)
+    p2 = p + lpp.stat_regline_equation(data=scatter_data, x="x", y="y", size=8)
+    assert isinstance(p2, lpp.PubPlotSpec)
+
+def test_stat_cor_multiple_methods(scatter_data):
+    """All three correlation methods should work."""
+    for method in ["pearson", "spearman", "kendall"]:
+        p = lpp.ggscatter(scatter_data, x="x", y="y", color="group")
+        p2 = p + lpp.stat_cor(data=scatter_data, x="x", y="y", method=method)
+        assert isinstance(p2, lpp.PubPlotSpec), f"Method {method} failed"
+
+def test_full_workflow_pca_clustering():
+    """End-to-end: generate clustered data, PCA, then ggscatter with ellipse + cor."""
+    rng = np.random.default_rng(42)
+    n = 20
+    groups = ["A"] * n + ["B"] * n + ["C"] * n
+    X = np.vstack([
+        rng.multivariate_normal([0, 0], [[1, 0.3], [0.3, 1]], size=n),
+        rng.multivariate_normal([3, 3], [[1, -0.2], [-0.2, 1]], size=n),
+        rng.multivariate_normal([-2, 4], [[1, 0.1], [0.1, 1]], size=n),
+    ])
+    df = pd.DataFrame(X, columns=["PC1", "PC2"])
+    df["group"] = groups
+
+    # Use ggscatter with ellipse + cor
+    p = lpp.ggscatter(
+        df, x="PC1", y="PC2", color="group", fill="group",
+        palette="npg", size=3,
+        ellipse=True, ellipse_level=0.95, ellipse_type="norm",
+        ellipse_alpha=0.15,
+        cor=True, cor_method="pearson", cor_size=12,
+        title="PCA Clustering", xlab="PC1", ylab="PC2"
+    )
+    assert isinstance(p, lpp.PubPlotSpec)
+    d = p.as_dict()
+    geoms = [l.get("geom") for l in d.get("layers", [])]
+    assert "point" in geoms
+    assert "polygon" in geoms  # ellipse layer
+    assert "text" in geoms  # cor annotation
+
+
+# ==============================================================================
+# Helper functions for ggcorr / stat_cor
+# ==============================================================================
+
+def test_compute_correlation_matrix_helper():
+    from letspubpy.plots import _compute_correlation_matrix
+    np.random.seed(42)
+    df = pd.DataFrame({
+        "a": np.random.normal(0, 1, 50),
+        "b": np.random.normal(0, 1, 50),
+    })
+    cor_df, p_df, var_cols = _compute_correlation_matrix(df, method="pearson")
+    assert len(var_cols) == 2
+    assert len(cor_df) == 4  # 2x2 matrix
+    assert set(cor_df.columns) == {"Var1", "Var2", "cor", "label"}
+
+def test_compute_correlation_matrix_diagonal():
+    from letspubpy.plots import _compute_correlation_matrix
+    np.random.seed(42)
+    df = pd.DataFrame({
+        "x": np.random.normal(0, 1, 30),
+        "y": np.random.normal(0, 1, 30),
+    })
+    cor_df, _, _ = _compute_correlation_matrix(df, method="pearson")
+    # Diagonal should be 1
+    diag = cor_df[cor_df["Var1"] == cor_df["Var2"]]
+    for _, row in diag.iterrows():
+        assert abs(row["cor"]) == 1.0
+
+def test_compute_correlation_matrix_with_nan():
+    from letspubpy.plots import _compute_correlation_matrix
+    df = pd.DataFrame({
+        "a": [1, 2, np.nan, 4, 5],
+        "b": [2, np.nan, 3, 4, 5],
+    })
+    cor_df, p_df, var_cols = _compute_correlation_matrix(df)
+    assert len(var_cols) == 2
+
+def test_ggcorr_precomputed_matrices():
+    """ggcorr should accept pre-computed correlation matrix."""
+    cor_df = pd.DataFrame({
+        "Var1": ["x", "x", "y", "y"],
+        "Var2": ["x", "y", "x", "y"],
+        "cor": [1.0, 0.5, 0.5, 1.0],
+        "label": ["1.00", "0.50", "0.50", "1.00"],
+    })
+    p = lpp.ggcorr(pd.DataFrame({"x": [1], "y": [2]}), cor_mat=cor_df)
+    assert isinstance(p, lpp.PubPlotSpec)
+
+
+# ==============================================================================
+# Edge case tests
+# ==============================================================================
+
+def test_ggqqplot_normal_data():
+    """ggqqplot should handle normally distributed data."""
+    np.random.seed(42)
+    df = pd.DataFrame({"val": np.random.normal(0, 1, 200)})
+    p = lpp.ggqqplot(df, x="val", add="qqline")
+    assert isinstance(p, lpp.PubPlotSpec)
+
+def test_ggqqplot_skewed_data():
+    """ggqqplot should handle skewed data."""
+    np.random.seed(42)
+    df = pd.DataFrame({"val": np.random.exponential(1, 200)})
+    p = lpp.ggqqplot(df, x="val")
+    assert isinstance(p, lpp.PubPlotSpec)
+
+def test_ggecdf_single_value():
+    """ggecdf should handle a single unique value."""
+    df = pd.DataFrame({"val": [1.0, 1.0, 1.0, 1.0]})
+    p = lpp.ggecdf(df, x="val")
+    assert isinstance(p, lpp.PubPlotSpec)
+
+def test_ggcorr_single_column():
+    """ggcorr with a single column should not crash."""
+    np.random.seed(42)
+    df = pd.DataFrame({"x": np.random.normal(0, 1, 50)})
+    p = lpp.ggcorr(df)
+    assert isinstance(p, lpp.PubPlotSpec)
+
+def test_rremove_chaining():
+    """Multiple rremove calls should chain."""
+    p = lpp.ggscatter(pd.DataFrame({"x": [1, 2, 3], "y": [4, 5, 6]}),
+                      x="x", y="y", title="T", xlab="X", ylab="Y")
+    p2 = lpp.rremove(lpp.rremove(p, "title"), "xlab")
+    assert isinstance(p2, lpp.PubPlotSpec)

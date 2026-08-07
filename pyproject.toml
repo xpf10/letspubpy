@@ -22,3 +22,8 @@ packages = ["src/letspubpy"]
 dev = [
     "pytest>=9.1.1",
 ]
+docs = [
+    "mkdocs>=1.6.0",
+    "mkdocs-material>=9.5.0",
+    "mkdocstrings[python]>=0.24.0",
+]

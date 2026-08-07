@@ -1,0 +1,113 @@
+site_name: letspubpy
+site_description: A publication-ready plotting library wrapping Lets-Plot, mimicking R's ggpubr
+site_url: https://xpf10.github.io/letspubpy
+repo_url: https://github.com/xpf10/letspubpy
+repo_name: xpf10/letspubpy
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+    - content.code.annotate
+    - toc.follow
+    - header.autohide
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+    logo: material/chart-timeline
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          import_paths:
+            - src
+          options:
+            show_source: true
+            show_root_heading: true
+            show_root_toc_entry: false
+            show_root_full_path: false
+            heading_level: 3
+            members_order: source
+            show_signature: true
+            show_signature_annotations: true
+            separate_signature: true
+            show_docstring_parameters: true
+            show_docstring_returns: true
+            show_docstring_raises: false
+            show_docstring_examples: true
+            show_docstring_note: true
+            show_docstring_warning: false
+            show_docstring_usage: false
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Examples: examples.md
+  - Plot Types:
+      - Boxplot: plots/boxplot.md
+      - Violin: plots/violin.md
+      - Bar Plot: plots/barplot.md
+      - Line Plot: plots/lineplot.md
+      - Scatter: plots/scatter.md
+      - Histogram: plots/histogram.md
+      - Density: plots/density.md
+      - Pie & Donut: plots/pie.md
+      - Q-Q Plot: plots/qqplot.md
+      - ECDF: plots/ecdf.md
+      - Correlation Heatmap: plots/corrplot.md
+  - Statistical Annotations:
+      - stat_compare_means: stats/compare-means.md
+      - stat_cor: stats/correlation.md
+      - stat_regline_equation: stats/regline-equation.md
+  - Themes & Palettes: themes-and-palettes.md
+  - Layout & Utilities: layout-and-utilities.md
+  - API Reference: api-reference.md
+  - Changelog: changelog.md

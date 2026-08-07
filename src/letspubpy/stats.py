@@ -2,7 +2,7 @@ import re
 import numpy as np
 import pandas as pd
 from scipy import stats
-from lets_plot import aes, geom_bracket, geom_text, geom_blank
+from lets_plot import aes, geom_bracket, geom_text, geom_blank, geom_qq, geom_qq_line, geom_qq2, geom_qq2_line
 
 def clean_mapping_column(val):
     """Extract clean column name from mapping values (like as_discrete('col'))."""
@@ -357,3 +357,297 @@ def stat_compare_means(data=None, x=None, y=None, comparisons=None, method="wilc
             if layer is not None:
                 return layer
             return geom_blank()
+
+
+# ==============================================================================
+# stat_cor — Correlation annotation layer
+# ==============================================================================
+
+def _compute_correlation(x, y, method="pearson"):
+    """Internal: compute correlation r, p, r2, method_name."""
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    mask = ~np.isnan(x) & ~np.isnan(y)
+    x, y = x[mask], y[mask]
+    if len(x) < 3:
+        return {"r": np.nan, "p": np.nan, "r2": np.nan, "method_name": method}
+
+    method_lower = method.lower()
+    if method_lower == "pearson":
+        r, p = stats.pearsonr(x, y)
+        method_name = "Pearson"
+    elif method_lower == "spearman":
+        r, p = stats.spearmanr(x, y)
+        method_name = "Spearman"
+    elif method_lower == "kendall":
+        tau, p = stats.kendalltau(x, y)
+        r = tau
+        method_name = "Kendall"
+    else:
+        raise ValueError(f"Unknown correlation method: {method}")
+    return {"r": r, "p": p, "r2": r ** 2, "method_name": method_name}
+
+
+def _make_cor_label(corr, label="R, p", **kwargs):
+    """Build the correlation label string."""
+    if np.isnan(corr["r"]):
+        return ""
+    label_lower = label.lower()
+    r_str = f"{corr['r']:.3f}"
+    r2_str = f"{corr['r2']:.3f}"
+    p_str = f"{corr['p']:.2g}" if not np.isnan(corr["p"]) else "NA"
+
+    if "r2" in label_lower and "p" not in label_lower:
+        return f"{corr['method_name']} R = {r_str}, R² = {r2_str}"
+    elif "r2" in label_lower:
+        return f"{corr['method_name']} R = {r_str}, R² = {r2_str}, p = {p_str}"
+    elif "p" in label_lower:
+        return f"{corr['method_name']} R = {r_str}, p = {p_str}"
+    else:
+        return f"{corr['method_name']} R = {r_str}"
+
+
+class StatCorAdder:
+    """Helper to allow stat_cor + operator on a PubPlotSpec."""
+    def __init__(self, method, label, label_x, label_y, size, r_coef, na_rm):
+        self.method = method
+        self.label = label
+        self.label_x = label_x
+        self.label_y = label_y
+        self.size = size
+        self.r_coef = r_coef
+        self.na_rm = na_rm
+
+    def __radd__(self, plot):
+        return _add_stat_cor_to_plot(
+            plot, method=self.method, label=self.label,
+            label_x=self.label_x, label_y=self.label_y,
+            size=self.size, r_coef=self.r_coef, na_rm=self.na_rm
+        )
+
+
+def _add_stat_cor_to_plot(plot, method="pearson", label="R, p",
+                           label_x=None, label_y=None, size=12,
+                           r_coef=False, na_rm=True):
+    """Core implementation of stat_cor when added to a plot."""
+    data, mapping = extract_data_and_mapping(plot)
+    if data is None or mapping is None:
+        raise ValueError("Could not extract data or mapping from the plot.")
+
+    x_col = clean_mapping_column(mapping.get('x'))
+    y_col = clean_mapping_column(mapping.get('y'))
+    if not x_col or not y_col:
+        raise ValueError("Plot is missing required 'x' or 'y' aesthetic.")
+
+    x_vals = data[x_col].values.astype(float)
+    y_vals = data[y_col].values.astype(float)
+    if na_rm:
+        mask = ~np.isnan(x_vals) & ~np.isnan(y_vals)
+        x_vals, y_vals = x_vals[mask], y_vals[mask]
+
+    if len(x_vals) < 3:
+        return plot
+
+    corr = _compute_correlation(x_vals, y_vals, method=method)
+    if np.isnan(corr["r"]):
+        return plot
+
+    label_text = _make_cor_label(corr, label=label)
+
+    x_min, x_max = x_vals.min(), x_vals.max()
+    y_min, y_max = y_vals.min(), y_vals.max()
+    if label_x is None:
+        label_x = x_min + 0.05 * (x_max - x_min)
+    if label_y is None:
+        label_y = y_max - 0.05 * (y_max - y_min)
+
+    return plot + geom_text(
+        x=label_x, y=label_y, label=label_text,
+        hjust=0, vjust=1, size=size
+    )
+
+
+def stat_cor(data=None, x=None, y=None, method="pearson",
+             label="R, p", label_x=None, label_y=None,
+             size=12, r_coef=False, na_rm=True):
+    """Add correlation annotation to a scatter plot.
+
+    Can be used:
+    1. As a plot modifier with `+`:
+       >>> ggscatter(df, x="x", y="y") + stat_cor(method="spearman")
+    2. As a standalone function returning a geom_text layer:
+       >>> stat_cor(df, x="x", y="y", method="pearson")
+    """
+    if data is None:
+        return StatCorAdder(
+            method=method, label=label, label_x=label_x,
+            label_y=label_y, size=size, r_coef=r_coef, na_rm=na_rm
+        )
+    else:
+        if x is None or y is None:
+            raise ValueError("x and y column names must be provided if data is specified.")
+        x_clean = clean_mapping_column(x)
+        y_clean = clean_mapping_column(y)
+
+        x_vals = data[x_clean].values.astype(float)
+        y_vals = data[y_clean].values.astype(float)
+        if na_rm:
+            mask = ~np.isnan(x_vals) & ~np.isnan(y_vals)
+            x_vals, y_vals = x_vals[mask], y_vals[mask]
+
+        if len(x_vals) < 3:
+            return geom_blank()
+
+        corr = _compute_correlation(x_vals, y_vals, method=method)
+        if np.isnan(corr["r"]):
+            return geom_blank()
+
+        label_text = _make_cor_label(corr, label=label)
+        x_min, x_max = x_vals.min(), x_vals.max()
+        y_min, y_max = y_vals.min(), y_vals.max()
+        if label_x is None:
+            label_x = x_min + 0.05 * (x_max - x_min)
+        if label_y is None:
+            label_y = y_max - 0.05 * (y_max - y_min)
+
+        return geom_text(
+            x=label_x, y=label_y, label=label_text,
+            hjust=0, vjust=1, size=size
+        )
+
+
+# ==============================================================================
+# stat_regline_equation — Regression equation annotation
+# ==============================================================================
+
+def _compute_regression(x, y):
+    """Fit OLS linear regression, return slope, intercept, r2, p_value."""
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    mask = ~np.isnan(x) & ~np.isnan(y)
+    x, y = x[mask], y[mask]
+    if len(x) < 3:
+        return {"slope": np.nan, "intercept": np.nan, "r2": np.nan, "p_value": np.nan}
+
+    res = stats.linregress(x, y)
+    return {
+        "slope": res.slope,
+        "intercept": res.intercept,
+        "r2": res.rvalue ** 2,
+        "p_value": res.pvalue,
+    }
+
+
+def _make_regline_label(reg, label="equation"):
+    """Build the regression equation label string."""
+    if np.isnan(reg["slope"]):
+        return ""
+    b = reg["slope"]
+    a = reg["intercept"]
+    sign = "+" if a >= 0 else "-"
+    if label == "equation":
+        return f"y = {b:.2f}x {sign} {abs(a):.2f}"
+    elif label == "eqp":
+        p_str = f"{reg['p_value']:.2g}" if not np.isnan(reg['p_value']) else "NA"
+        return f"y = {b:.2f}x {sign} {abs(a):.2f}, p = {p_str}"
+    elif label == "R2":
+        return f"R² = {reg['r2']:.3f}"
+    elif label == "eqR2":
+        return f"y = {b:.2f}x {sign} {abs(a):.2f}, R² = {reg['r2']:.3f}"
+    elif label == "eqpR2":
+        p_str = f"{reg['p_value']:.2g}" if not np.isnan(reg['p_value']) else "NA"
+        return f"y = {b:.2f}x {sign} {abs(a):.2f}, p = {p_str}, R² = {reg['r2']:.3f}"
+    else:
+        return f"y = {b:.2f}x {sign} {abs(a):.2f}"
+
+
+class StatReglineEquationAdder:
+    """Helper to allow stat_regline_equation + operator."""
+    def __init__(self, label, label_x, label_y, size):
+        self.label = label
+        self.label_x = label_x
+        self.label_y = label_y
+        self.size = size
+
+    def __radd__(self, plot):
+        return _add_regline_equation_to_plot(
+            plot, label=self.label,
+            label_x=self.label_x, label_y=self.label_y,
+            size=self.size
+        )
+
+
+def _add_regline_equation_to_plot(plot, label="equation",
+                                   label_x=None, label_y=None, size=12):
+    """Core implementation of stat_regline_equation when added to a plot."""
+    data, mapping = extract_data_and_mapping(plot)
+    if data is None or mapping is None:
+        raise ValueError("Could not extract data or mapping from the plot.")
+
+    x_col = clean_mapping_column(mapping.get('x'))
+    y_col = clean_mapping_column(mapping.get('y'))
+    if not x_col or not y_col:
+        raise ValueError("Plot is missing required 'x' or 'y' aesthetic.")
+
+    x_vals = data[x_col].values.astype(float)
+    y_vals = data[y_col].values.astype(float)
+
+    reg = _compute_regression(x_vals, y_vals)
+    if np.isnan(reg["slope"]):
+        return plot
+
+    label_text = _make_regline_label(reg, label=label)
+
+    x_min, x_max = x_vals.min(), x_vals.max()
+    y_min, y_max = y_vals.min(), y_vals.max()
+    if label_x is None:
+        label_x = x_min + 0.05 * (x_max - x_min)
+    if label_y is None:
+        label_y = y_max - 0.05 * (y_max - y_min)
+
+    return plot + geom_text(
+        x=label_x, y=label_y, label=label_text,
+        hjust=0, vjust=1, size=size
+    )
+
+
+def stat_regline_equation(data=None, x=None, y=None, label="equation",
+                           label_x=None, label_y=None, size=12):
+    """Add regression equation annotation to a scatter plot.
+
+    Can be used:
+    1. As a plot modifier with `+`:
+       >>> ggscatter(df, x="x", y="y", add="reg.line") + stat_regline_equation()
+    2. As a standalone function returning a geom_text layer:
+       >>> stat_regline_equation(df, x="x", y="y", label="eqR2")
+    """
+    if data is None:
+        return StatReglineEquationAdder(
+            label=label, label_x=label_x,
+            label_y=label_y, size=size
+        )
+    else:
+        if x is None or y is None:
+            raise ValueError("x and y column names must be provided if data is specified.")
+        x_clean = clean_mapping_column(x)
+        y_clean = clean_mapping_column(y)
+
+        x_vals = data[x_clean].values.astype(float)
+        y_vals = data[y_clean].values.astype(float)
+
+        reg = _compute_regression(x_vals, y_vals)
+        if np.isnan(reg["slope"]):
+            return geom_blank()
+
+        label_text = _make_regline_label(reg, label=label)
+        x_min, x_max = x_vals.min(), x_vals.max()
+        y_min, y_max = y_vals.min(), y_vals.max()
+        if label_x is None:
+            label_x = x_min + 0.05 * (x_max - x_min)
+        if label_y is None:
+            label_y = y_max - 0.05 * (y_max - y_min)
+
+        return geom_text(
+            x=label_x, y=label_y, label=label_text,
+            hjust=0, vjust=1, size=size
+        )
