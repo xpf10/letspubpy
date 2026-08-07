@@ -15,7 +15,13 @@ from .plots import (
     gghistogram,
     ggdensity,
     ggpie,
-    ggdonutchart
+    ggdonutchart,
+    confidence_ellipse_points,
+    build_ellipse_df,
+    compute_correlation,
+    get_color_fill_aes_and_params,
+    apply_labels_and_theme,
+    add_extra_layers
 )
 from .theme import theme_pubr, scale_color_pubr, scale_fill_pubr
 from .stats import stat_compare_means, add_stat_compare_means
@@ -33,5 +39,7 @@ __all__.extend([
     'ggbarplot', 'ggline', 'ggscatter', 'gghistogram', 'ggdensity', 'ggpie',
     'ggdonutchart', 'theme_pubr', 'scale_color_pubr', 'scale_fill_pubr',
     'stat_compare_means', 'add_stat_compare_means', 'ggarrange',
-    'theme_prism', 'scale_color_prism', 'scale_colour_prism', 'scale_fill_prism', 'scale_shape_prism'
+    'theme_prism', 'scale_color_prism', 'scale_colour_prism', 'scale_fill_prism', 'scale_shape_prism',
+    'confidence_ellipse_points', 'build_ellipse_df', 'compute_correlation',
+    'get_color_fill_aes_and_params', 'apply_labels_and_theme', 'add_extra_layers'
 ])

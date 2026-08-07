@@ -8,3 +8,11 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Trae / IDE artifacts
+.agents/
+skills-lock.json
+lets-plot-images/
+
+# Demo images (generated)
+images/pca_clustering_example.svg

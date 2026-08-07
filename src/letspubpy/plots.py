@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from scipy import stats as _scipy_stats
 from lets_plot import (
     ggplot as _ggplot,
     geom_boxplot,
@@ -14,12 +15,18 @@ from lets_plot import (
     geom_density,
     geom_pie,
     geom_errorbar,
+    geom_polygon,
+    geom_text,
+    geom_blank,
+    coord_fixed,
     position_dodge,
     aes,
     ggtitle,
     xlab,
     ylab,
     scale_x_discrete,
+    scale_y_continuous,
+    scale_x_continuous,
     theme,
     layer_labels
 )
@@ -479,16 +486,243 @@ def ggline(data, x, y, color="black", fill="white", palette="npg", size=None,
     p = apply_labels_and_theme(p, title, xlab, ylab, order, show_legend, ggtheme)
     return p
 
+
+def confidence_ellipse_points(mean, cov, n_points=120, level=0.95, ellipse_type="norm", n=None):
+    """Return the coordinates of a 2D confidence ellipse boundary.
+
+    Parameters
+    ----------
+    mean : array-like of shape (2,)
+        Center of the ellipse.
+    cov : array-like of shape (2, 2)
+        Covariance matrix.
+    n_points : int
+        Number of boundary points.
+    level : float
+        Confidence level, e.g. 0.95 for a 95% ellipse.
+    ellipse_type : str
+        One of ``"norm"``, ``"t"``, or ``"euclid"``.
+        * ``"norm"``: Multivariate normal (chi-square, df=2).
+        * ``"t"``: Hotelling T-squared, using the F-distribution for 2D.
+        * ``"euclid"``: Equal-radius circle (useful when covariates are
+          standardized / on the same scale).
+    n : int or None
+        Sample size, required when ``ellipse_type="t"``.
+    """
+    mean = np.asarray(mean, dtype=float)
+    cov = np.asarray(cov, dtype=float)
+    if mean.shape != (2,):
+        raise ValueError("mean must have shape (2,)")
+    if cov.shape != (2, 2):
+        raise ValueError("cov must have shape (2, 2)")
+
+    if ellipse_type == "norm":
+        scale = _scipy_stats.chi2.ppf(level, df=2)
+    elif ellipse_type == "t":
+        if n is None or n < 3:
+            raise ValueError("n (sample size) must be provided and >= 3 for ellipse_type='t'")
+        F = _scipy_stats.f.ppf(level, dfn=2, dfd=n - 2)
+        scale = 2 * F * (n - 1) / (n - 2)
+    elif ellipse_type == "euclid":
+        # Equal-radius circle: use a spherical covariance (identity) and scale
+        # by the average variance
+        avg_var = (cov[0, 0] + cov[1, 1]) / 2
+        r = np.sqrt(avg_var * _scipy_stats.chi2.ppf(level, df=2))
+        theta = np.linspace(0, 2 * np.pi, n_points)
+        circle = np.column_stack([r * np.cos(theta), r * np.sin(theta)])
+        return circle + mean
+    else:
+        raise ValueError(f"Unknown ellipse_type: {ellipse_type}")
+
+    vals, vecs = np.linalg.eigh(cov)
+    order = vals.argsort()[::-1]
+    vals = vals[order]
+    vecs = vecs[:, order]
+    vals = np.clip(vals, a_min=1e-12, a_max=None)
+
+    widths = np.sqrt(vals * scale)
+    theta = np.linspace(0, 2 * np.pi, n_points)
+    circle = np.vstack([np.cos(theta), np.sin(theta)])
+    ellipse = np.diag(widths) @ circle
+    ellipse = vecs @ ellipse
+    ellipse = ellipse + mean[:, None]
+    return ellipse.T
+
+
+def build_ellipse_df(df, x_col, y_col, group_col=None, level=0.95,
+                     ellipse_type="norm", n_points=120):
+    """Build a long-form DataFrame of ellipse boundary points.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Source data.
+    x_col, y_col : str
+        Column names for x and y.
+    group_col : str or None
+        Column name for grouping; if provided, one ellipse per group.
+    level : float
+        Confidence level.
+    ellipse_type : str
+        ``"norm"``, ``"t"``, or ``"euclid"``.
+    n_points : int
+        Number of boundary points per ellipse.
+
+    Returns
+    -------
+    pd.DataFrame
+        Long-form DataFrame with columns matching the input names and an
+        optional grouping column, with a ``.group_index`` to help draw each
+        ellipse as a single closed polygon.
+    """
+    rows = []
+    if group_col is None:
+        pts = df[[x_col, y_col]].dropna().values
+        if len(pts) < 2:
+            return pd.DataFrame(columns=[x_col, y_col, "_ellipse_group"])
+        mean = pts.mean(axis=0)
+        cov = np.cov(pts.T)
+        n = len(pts)
+        ell = confidence_ellipse_points(mean, cov, n_points=n_points,
+                                        level=level, ellipse_type=ellipse_type, n=n)
+        for i, (px, py) in enumerate(ell):
+            rows.append({x_col: px, y_col: py, "_ellipse_group": 0})
+        # Close the polygon
+        rows.append({x_col: ell[0, 0], y_col: ell[0, 1], "_ellipse_group": 0})
+    else:
+        for gi, (g, sub) in enumerate(df.groupby(group_col, sort=False)):
+            pts = sub[[x_col, y_col]].dropna().values
+            if len(pts) < 2:
+                continue
+            mean = pts.mean(axis=0)
+            cov = np.cov(pts.T)
+            n = len(pts)
+            ell = confidence_ellipse_points(mean, cov, n_points=n_points,
+                                            level=level, ellipse_type=ellipse_type, n=n)
+            for px, py in ell:
+                rows.append({x_col: px, y_col: py, group_col: g, "_ellipse_group": gi})
+            # Close the polygon by repeating the first point
+            rows.append({x_col: ell[0, 0], y_col: ell[0, 1], group_col: g, "_ellipse_group": gi})
+    return pd.DataFrame(rows)
+
+
+def compute_correlation(x, y, method="pearson"):
+    """Compute correlation coefficient and p-value.
+
+    Parameters
+    ----------
+    x, y : array-like
+        Numeric vectors of the same length.
+    method : str
+        ``"pearson"``, ``"spearman"``, or ``"kendall"``.
+
+    Returns
+    -------
+    dict
+        Dictionary with keys ``r``, ``p``, ``r2``, ``method_name``.
+    """
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    mask = ~np.isnan(x) & ~np.isnan(y)
+    x, y = x[mask], y[mask]
+    if len(x) < 3:
+        return {"r": np.nan, "p": np.nan, "r2": np.nan, "method_name": method}
+
+    method_lower = method.lower()
+    if method_lower == "pearson":
+        r, p = _scipy_stats.pearsonr(x, y)
+        method_name = "Pearson"
+    elif method_lower == "spearman":
+        r, p = _scipy_stats.spearmanr(x, y)
+        method_name = "Spearman"
+    elif method_lower == "kendall":
+        tau, p = _scipy_stats.kendalltau(x, y)
+        r = tau
+        method_name = "Kendall"
+    else:
+        raise ValueError(f"Unknown correlation method: {method}")
+    return {"r": r, "p": p, "r2": r ** 2, "method_name": method_name}
+
+
 def ggscatter(data, x, y, color="black", fill=None, palette="npg", shape=19, size=None,
-              add="none", add_params=None, title=None, xlab=None, ylab=None,
+              add="none", add_params=None,
+              ellipse=False, ellipse_level=0.95, ellipse_type="norm", ellipse_alpha=0.15,
+              rug=False, rug_size=0.5,
+              cor=False, cor_method="pearson", cor_coef=False, cor_size=12,
+              label=None, label_size=4,
+              confint=True, confint_level=0.95,
+              aspect_ratio=None,
+              position=None,
+              title=None, xlab=None, ylab=None,
               show_legend=True, ggtheme=None):
-    """Create a publication-ready scatter plot with optional regression lines."""
+    """Create a publication-ready scatter plot with optional overlay layers.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Input data.
+    x, y : str
+        Column names for x and y axes.
+    color : str
+        Column name or constant color for point outlines.
+    fill : str
+        Column name or constant color for point fills.
+    palette : str
+        Color palette name (e.g. ``"npg"``, ``"aaas"``).
+    shape : int or str
+        Point shape constant or column name mapping to shapes.
+    size : float
+        Point size.
+    add : str or list of str
+        Additional layers: ``"reg.line"``, ``"mean_se"``, ``"mean_sd"``,
+        ``"jitter"``, ``"point"``.
+    add_params : dict
+        Extra parameters for the ``add`` layer.
+    ellipse : bool
+        If True, draws a confidence ellipse around each group (or overall).
+    ellipse_level : float
+        Confidence level for the ellipse, default 0.95.
+    ellipse_type : str
+        ``"norm"`` (chi-square), ``"t"`` (Hotelling T2), or ``"euclid"``.
+    ellipse_alpha : float
+        Transparency of the ellipse fill, default 0.15.
+    rug : bool
+        If True, adds marginal rug plots on both axes.
+    rug_size : float
+        Size of rug marks.
+    cor : bool
+        If True, shows the correlation coefficient on the plot.
+    cor_method : str
+        ``"pearson"``, ``"spearman"``, or ``"kendall"``.
+    cor_coef : bool
+        If True, shows R and R^2; if False, shows R and p-value.
+    cor_size : int
+        Font size of the correlation text.
+    label : str
+        Column name whose values will be used as point labels.
+    label_size : float
+        Font size for point labels.
+    confint : bool
+        If True (and ``add="reg.line"``), draws the confidence band.
+    confint_level : float
+        Confidence level for the regression band.
+    aspect_ratio : float
+        If set, enforces a fixed aspect ratio on the plot.
+    position : object
+        Position adjustment (e.g. ``position_dodge()``).
+    title, xlab, ylab : str
+        Labels.
+    show_legend : bool
+        Whether to show the legend.
+    ggtheme : object
+        Custom theme; defaults to ``theme_pubr()``.
+    """
     df = data.copy()
     mapping = aes(x=x, y=y)
     geom_mapping, geom_params = get_color_fill_aes_and_params(df, color, fill)
-    
+
     p = ggplot(df, mapping)
-    
+
     pt_params = {}
     if size is not None:
         pt_params['size'] = size
@@ -497,15 +731,15 @@ def ggscatter(data, x, y, color="black", fill=None, palette="npg", shape=19, siz
             geom_mapping['shape'] = shape
         else:
             pt_params['shape'] = shape
-            
     pt_params.update(geom_params)
     p += geom_point(aes(**geom_mapping), **pt_params)
-    
+
     if 'color' in geom_mapping:
         p += scale_color_pubr(palette)
     if 'fill' in geom_mapping:
         p += scale_fill_pubr(palette)
-        
+
+    # ---- Regression line with optional confidence band ----
     if add != "none":
         if isinstance(add, str):
             add = [add]
@@ -515,11 +749,101 @@ def ggscatter(data, x, y, color="black", fill=None, palette="npg", shape=19, siz
                 if 'method' not in item_params:
                     item_params['method'] = 'lm'
                 if 'se' not in item_params:
-                    item_params['se'] = True
+                    item_params['se'] = confint
+                if confint_level != 0.95 and 'level' not in item_params:
+                    item_params['level'] = confint_level
                 p += geom_smooth(aes(**geom_mapping), **item_params)
+            elif item in ("mean_se", "mean_sd"):
+                group_col = color if color in df.columns else (fill if fill in df.columns else None)
+                agg_df = df.groupby([x] + ([group_col] if group_col else []), as_index=False).agg(
+                    mean_y=(y, 'mean'),
+                    sd_y=(y, 'std'),
+                    count_y=(y, 'count')
+                )
+                agg_df['se_y'] = agg_df['sd_y'] / np.sqrt(agg_df['count_y'].replace(0, np.nan))
+                agg_df['se_y'] = agg_df['se_y'].fillna(0)
+                agg_df['sd_y'] = agg_df['sd_y'].fillna(0)
+                agg_df['ymin'] = agg_df['mean_y'] - (agg_df['se_y'] if item == "mean_se" else agg_df['sd_y'])
+                agg_df['ymax'] = agg_df['mean_y'] + (agg_df['se_y'] if item == "mean_se" else agg_df['sd_y'])
+                eb_mapping = aes(ymin='ymin', ymax='ymax')
+                if group_col:
+                    eb_mapping = aes(ymin='ymin', ymax='ymax', group=group_col)
+                if 'width' not in item_params:
+                    item_params['width'] = 0.2
+                p += geom_errorbar(eb_mapping, data=agg_df,
+                                   position=position if position else 'identity',
+                                   **item_params)
             else:
                 p = add_extra_layers(p, x, y, [item], add_params, df, color, fill)
-                
+
+    # ---- Confidence ellipse ----
+    if ellipse:
+        group_col = color if color in df.columns else (fill if fill in df.columns else None)
+        ell_df = build_ellipse_df(df, x, y, group_col=group_col,
+                                  level=ellipse_level, ellipse_type=ellipse_type)
+        if len(ell_df) > 0:
+            poly_mapping_dict = {"x": x, "y": y}
+            if group_col and group_col in ell_df.columns:
+                poly_mapping_dict["group"] = group_col
+                poly_mapping_dict["fill"] = group_col
+                poly_mapping_dict["color"] = group_col
+            ell_params = {'alpha': ellipse_alpha, 'size': 0.8}
+            p += geom_polygon(aes(**poly_mapping_dict), data=ell_df, **ell_params)
+            if 'color' in geom_mapping:
+                p += scale_color_pubr(palette)
+            if 'fill' in geom_mapping:
+                p += scale_fill_pubr(palette)
+
+    # ---- Marginal rug plots ----
+    if rug:
+        # Vertical rug on x-axis
+        x_vals = df[x].dropna().values
+        if len(x_vals) > 0:
+            y_range = df[y].dropna().values
+            y_min, y_max = y_range.min(), y_range.max()
+            rug_y = y_min - 0.02 * (y_max - y_min)
+            rug_df_x = pd.DataFrame({x: x_vals, 'rug_y': rug_y})
+            p += geom_point(aes(x=x, y='rug_y'), data=rug_df_x, shape='|',
+                            size=rug_size, color='black', alpha=0.6)
+        # Horizontal rug on y-axis
+        y_vals = df[y].dropna().values
+        if len(y_vals) > 0:
+            x_range = df[x].dropna().values
+            x_min, x_max = x_range.min(), x_range.max()
+            rug_x = x_min - 0.02 * (x_max - x_min)
+            rug_df_y = pd.DataFrame({y: y_vals, 'rug_x': rug_x})
+            p += geom_point(aes(x='rug_x', y=y), data=rug_df_y, shape='_',
+                            size=rug_size, color='black', alpha=0.6)
+
+    # ---- Correlation annotation ----
+    if cor:
+        corr = compute_correlation(df[x].values, df[y].values, method=cor_method)
+        if not np.isnan(corr['r']):
+            if cor_coef:
+                label_text = f"{corr['method_name']} R = {corr['r']:.3f}, R² = {corr['r2']:.3f}"
+            else:
+                p_str = _scipy_stats.chi2.sf(corr['r'] ** 2 * (len(df) - 2) / (1 - corr['r'] ** 2), df=1) \
+                    if abs(corr['r']) < 1 else 0
+                p_str = f"{p_str:.2g}" if not np.isnan(p_str) else "NA"
+                label_text = f"{corr['method_name']} R = {corr['r']:.3f}, p = {p_str}"
+            x_range = df[x].dropna().values
+            y_range = df[y].dropna().values
+            x_min, x_max = x_range.min(), x_range.max()
+            y_min, y_max = y_range.min(), y_range.max()
+            cor_x = x_min + 0.05 * (x_max - x_min)
+            cor_y = y_max - 0.05 * (y_max - y_min)
+            p += geom_text(x=cor_x, y=cor_y, label=label_text,
+                           hjust=0, vjust=1, size=cor_size)
+
+    # ---- Point labels ----
+    if label is not None and label in df.columns:
+        p += geom_text(aes(x=x, y=y, label=label), data=df,
+                       size=label_size, color='black')
+
+    # ---- Fixed aspect ratio ----
+    if aspect_ratio is not None:
+        p += coord_fixed(ratio=aspect_ratio)
+
     p = apply_labels_and_theme(p, title, xlab, ylab, None, show_legend, ggtheme)
     return p
 
