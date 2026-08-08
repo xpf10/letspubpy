@@ -42,18 +42,11 @@ plugins:
           options:
             show_source: true
             show_root_heading: true
-            show_root_toc_entry: false
-            show_root_full_path: false
             heading_level: 3
             members_order: source
             show_signature: true
             show_signature_annotations: true
             separate_signature: true
-            show_docstring_parameters: true
-            show_docstring_returns: true
-            show_docstring_raises: false
-            show_docstring_examples: true
-            show_docstring_warning: false
 
 markdown_extensions:
   - admonition
