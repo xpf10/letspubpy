@@ -28,6 +28,8 @@ p = lpp.ggscatter(
 )
 ```
 
+![Scatter with Regression](../images/scatter_basic.png)
+
 ## Grouped Scatter with Ellipses
 
 ```python
@@ -57,6 +59,8 @@ p = lpp.ggscatter(
 p.show()
 ```
 
+![Grouped Scatter with Ellipses](../images/scatter_ellipse.png)
+
 ## Adding Rug Plot
 
 ```python
@@ -69,6 +73,8 @@ p = lpp.ggscatter(df, x='x', y='y', color='#3C5488', rug=True)
 p = lpp.ggscatter(df, x='x', y='y', color='#3C5488') + \
     lpp.stat_cor(method='pearson', size=12)
 ```
+
+![Scatter with Correlation](../images/scatter_cor.png)
 
 ## Full Feature Set
 

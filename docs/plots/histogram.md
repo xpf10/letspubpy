@@ -37,6 +37,8 @@ p = lpp.gghistogram(
 )
 ```
 
+![Histogram Example](../images/histogram_basic.png)
+
 ## API
 
 ::: letspubpy.plots.gghistogram

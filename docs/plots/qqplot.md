@@ -24,6 +24,8 @@ p.show()
 p = lpp.ggqqplot(df, x='value', add='qqline')
 ```
 
+![Q-Q Plot Example](../images/qqplot_basic.png)
+
 ## Grouped Q-Q Plot
 
 ```python

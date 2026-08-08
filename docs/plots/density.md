@@ -37,6 +37,8 @@ p = lpp.ggdensity(
 )
 ```
 
+![Density Plot Example](../images/density_basic.png)
+
 ## API
 
 ::: letspubpy.plots.ggdensity

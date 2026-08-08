@@ -33,6 +33,8 @@ p = lpp.ggcorr(df, method='spearman')
 p = lpp.ggcorr(df, method='kendall')
 ```
 
+![Correlation Heatmap Example](../images/corrplot_basic.png)
+
 ## Showing P-value Symbols
 
 ```python

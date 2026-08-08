@@ -58,6 +58,8 @@ p = lpp.ggboxplot(
 p.show()
 ```
 
+![Quick Example](images/boxplot_stats.png)
+
 ---
 
 ## 📚 Documentation Sections

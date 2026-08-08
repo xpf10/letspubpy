@@ -45,6 +45,8 @@ p = lpp.ggbarplot(
 )
 ```
 
+![Bar Plot Example](../images/barplot_basic.png)
+
 ## API
 
 ::: letspubpy.plots.ggbarplot

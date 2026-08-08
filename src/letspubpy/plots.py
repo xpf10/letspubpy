@@ -352,7 +352,7 @@ def ggbarplot(data, x, y=None, color="black", fill="white", palette="npg", width
     else:
         # Plot mean/identity
         groupby_cols = [x]
-        if group_col:
+        if group_col and group_col != x:
             groupby_cols.append(group_col)
             
         # Group and aggregate

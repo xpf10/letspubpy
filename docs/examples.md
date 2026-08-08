@@ -30,6 +30,8 @@ p = lpp.ggboxplot(
 p.show()
 ```
 
+![Boxplot with Statistics](images/boxplot_stats.png)
+
 ## Example 2: Violin Plot with Embedded Boxplot
 
 ```python
@@ -40,6 +42,8 @@ p = lpp.ggviolin(
 )
 p.show()
 ```
+
+![Violin Plot](images/violin_basic.png)
 
 ## Example 3: Scatter Plot with Regression and Correlation
 
@@ -57,6 +61,8 @@ p = lpp.ggscatter(
 ) + lpp.stat_cor(method='pearson', size=12)
 p.show()
 ```
+
+![Scatter with Correlation](images/scatter_cor.png)
 
 ## Example 4: Multi-panel Figure
 
@@ -103,6 +109,8 @@ p = lpp.ggscatter(
 p.show()
 ```
 
+![PCA Clustering](images/pca_clustering.png)
+
 ## Example 6: Correlation Heatmap
 
 ```python
@@ -121,6 +129,8 @@ p = lpp.ggcorr(
 )
 p.show()
 ```
+
+![Correlation Heatmap](images/corrplot_basic.png)
 
 ## Example 7: Customizing with rremove and ggpar
 

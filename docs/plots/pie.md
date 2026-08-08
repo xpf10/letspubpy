@@ -17,6 +17,8 @@ p = lpp.ggpie(df, x='category', label='count', fill='category', palette='npg')
 p.show()
 ```
 
+![Pie Chart Example](../images/pie_basic.png)
+
 ## Donut Chart
 
 ```python
@@ -26,6 +28,8 @@ p = lpp.ggdonutchart(
     hole=0.4
 )
 ```
+
+![Donut Chart Example](../images/donut_basic.png)
 
 ## API
 

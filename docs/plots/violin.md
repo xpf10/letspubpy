@@ -23,6 +23,8 @@ p = lpp.ggviolin(df, x='group', y='value', fill='group', palette='npg')
 p.show()
 ```
 
+![Violin Plot Example](../images/violin_basic.png)
+
 ## With Inner Boxplot
 
 ```python

@@ -20,9 +20,11 @@ df = pd.DataFrame({
 })
 
 # Basic boxplot
-p = lpp.ggboxplot(df, x='group', y='expression', fill='group', palette='npg')
+p = lpp.ggboxplot(df, x='group', y='expression', fill='group', palette='npg', add='jitter')
 p.show()
 ```
+
+![Boxplot Example](../images/boxplot_basic.png)
 
 ## Adding Data Points
 
@@ -56,6 +58,8 @@ p = lpp.ggboxplot(df, x='group', y='expression', fill='group', add='jitter') + \
         method='wilcoxon', color='red'
     )
 ```
+
+![Boxplot with Statistics](../images/boxplot_stats.png)
 
 ## Custom Appearance
 

@@ -37,6 +37,8 @@ p = lpp.ggline(
 )
 ```
 
+![Line Plot Example](../images/lineplot_basic.png)
+
 ## API
 
 ::: letspubpy.plots.ggline

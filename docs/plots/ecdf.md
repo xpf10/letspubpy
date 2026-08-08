@@ -36,6 +36,8 @@ p = lpp.ggecdf(
 )
 ```
 
+![ECDF Plot Example](../images/ecdf_basic.png)
+
 ## API
 
 ::: letspubpy.plots.ggecdf

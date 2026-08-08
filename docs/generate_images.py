@@ -1,0 +1,254 @@
+"""Generate all example plot images for the documentation."""
+import os
+import warnings
+import numpy as np
+import pandas as pd
+import letspubpy as lpp
+from lets_plot import ggsave, LetsPlot
+
+warnings.filterwarnings("ignore")
+LetsPlot.setup_html()
+
+# Output directory
+IMG_DIR = os.path.join(os.path.dirname(__file__), "images")
+os.makedirs(IMG_DIR, exist_ok=True)
+
+
+def save(p, name, w=800, h=500):
+    path = os.path.join(IMG_DIR, f"{name}.png")
+    ggsave(p, filename=f"{name}.png", path=IMG_DIR, w=w, h=h, unit="px")
+    print(f"  saved: {path}")
+
+
+# ── Shared data ────────────────────────────────────────────────────────────────
+np.random.seed(42)
+N = 30
+
+df_box = pd.DataFrame({
+    "group": ["Control"] * N + ["Treat A"] * N + ["Treat B"] * N,
+    "expression": np.concatenate([
+        np.random.normal(1.0, 0.4, N),
+        np.random.normal(1.8, 0.5, N),
+        np.random.normal(1.4, 0.3, N),
+    ]),
+})
+
+df_violin = pd.DataFrame({
+    "group": ["A"] * 50 + ["B"] * 50 + ["C"] * 50,
+    "value": np.concatenate([
+        np.random.normal(0, 1, 50),
+        np.random.normal(2, 1.5, 50),
+        np.random.normal(-1, 0.8, 50),
+    ]),
+})
+
+df_bar = pd.DataFrame({
+    "treatment": ["A"] * N + ["B"] * N + ["C"] * N,
+    "value": np.concatenate([
+        np.random.normal(0, 1, N),
+        np.random.normal(1.5, 1, N),
+        np.random.normal(0.5, 1, N),
+    ]),
+})
+
+df_line = pd.DataFrame({
+    "time": ["Day 1"] * 20 + ["Day 3"] * 20 + ["Day 7"] * 20,
+    "treatment": (["Ctrl"] * 10 + ["Drug"] * 10) * 3,
+    "value": np.concatenate([
+        np.random.normal(0, 1, 10), np.random.normal(2, 1, 10),
+        np.random.normal(0.5, 1, 10), np.random.normal(3, 1, 10),
+        np.random.normal(1, 1, 10), np.random.normal(4, 1, 10),
+    ]),
+})
+
+x_scatter = np.random.uniform(1, 10, 50)
+y_scatter = x_scatter * 1.5 + np.random.normal(0, 1.5, 50)
+df_scatter = pd.DataFrame({"x": x_scatter, "y": y_scatter})
+
+df_scatter_group = pd.DataFrame({
+    "x": np.concatenate([
+        np.random.normal(0, 1, N), np.random.normal(3, 1, N), np.random.normal(-2, 1, N)
+    ]),
+    "y": np.concatenate([
+        np.random.normal(0, 1, N), np.random.normal(3, 1, N), np.random.normal(4, 1, N)
+    ]),
+    "group": ["A"] * N + ["B"] * N + ["C"] * N,
+})
+
+df_hist = pd.DataFrame({
+    "value": np.concatenate([
+        np.random.normal(0, 1, 100), np.random.normal(2, 1, 100)
+    ]),
+    "group": ["A"] * 100 + ["B"] * 100,
+})
+
+df_density = df_hist.copy()
+
+df_pie = pd.DataFrame({
+    "category": ["A", "B", "C", "D"],
+    "count": [30, 25, 20, 25],
+})
+
+df_qq = pd.DataFrame({"value": np.random.normal(0, 1, 200)})
+df_qq_group = pd.DataFrame({
+    "value": np.concatenate([
+        np.random.normal(0, 1, 100), np.random.normal(2, 1, 100)
+    ]),
+    "group": ["A"] * 100 + ["B"] * 100,
+})
+
+df_ecdf = pd.DataFrame({
+    "value": np.concatenate([
+        np.random.normal(0, 1, 100), np.random.normal(2, 1, 100)
+    ]),
+    "group": ["A"] * 100 + ["B"] * 100,
+})
+
+df_corr = pd.DataFrame({
+    "height": np.random.normal(170, 10, 100),
+    "weight": np.random.normal(70, 15, 100),
+    "age": np.random.normal(30, 5, 100),
+    "score": np.random.normal(80, 10, 100),
+})
+
+df_pca = df_scatter_group.rename(columns={"x": "PC1", "y": "PC2"})
+
+
+# ── Generate plots ─────────────────────────────────────────────────────────────
+print("Generating images...")
+
+# 1. Boxplot
+p = lpp.ggboxplot(
+    df_box, x="group", y="expression",
+    fill="group", palette="npg", add="jitter",
+    title="Gene Expression Analysis",
+)
+save(p, "boxplot_basic")
+
+p = lpp.ggboxplot(
+    df_box, x="group", y="expression",
+    fill="group", palette="npg", add="jitter",
+    title="With Statistical Comparisons",
+) + lpp.stat_compare_means(
+    comparisons=[("Control", "Treat A"), ("Treat A", "Treat B")],
+    method="wilcoxon", color="red",
+)
+save(p, "boxplot_stats")
+
+# 2. Violin
+p = lpp.ggviolin(
+    df_violin, x="group", y="value",
+    fill="group", palette="npg", add="boxplot",
+    title="Violin with Embedded Boxplot",
+)
+save(p, "violin_basic")
+
+# 3. Bar plot
+p = lpp.ggbarplot(
+    df_bar, x="treatment", y="value",
+    fill="treatment", palette="npg", add="mean_se",
+    title="Bar Plot with Error Bars",
+)
+save(p, "barplot_basic")
+
+# 4. Line plot
+p = lpp.ggline(
+    df_line, x="time", y="value",
+    color="treatment", palette="npg", add="mean_se",
+    title="Line Plot with Error Bars",
+)
+save(p, "lineplot_basic")
+
+# 5. Scatter
+p = lpp.ggscatter(
+    df_scatter, x="x", y="y", color="#3C5488",
+    add="reg.line", confint=True,
+    title="Scatter with Regression Line",
+)
+save(p, "scatter_basic")
+
+p = lpp.ggscatter(
+    df_scatter_group, x="x", y="y",
+    color="group", fill="group", palette="npg", size=3,
+    ellipse=True, ellipse_level=0.95, ellipse_type="norm", ellipse_alpha=0.15,
+    title="Grouped Scatter with Confidence Ellipses",
+)
+save(p, "scatter_ellipse")
+
+p = lpp.ggscatter(
+    df_scatter, x="x", y="y", color="#3C5488",
+    add="reg.line", confint=True,
+    title="Scatter with Correlation Annotation",
+) + lpp.stat_cor(method="pearson", size=12)
+save(p, "scatter_cor")
+
+# 6. Histogram
+p = lpp.gghistogram(
+    df_hist, x="value", fill="group", palette="npg",
+    bins=30,
+    title="Grouped Histogram",
+)
+save(p, "histogram_basic")
+
+# 7. Density
+p = lpp.ggdensity(
+    df_density, x="value", fill="group", palette="npg",
+    title="Grouped Density Plot",
+)
+save(p, "density_basic")
+
+# 8. Pie & Donut
+p = lpp.ggpie(
+    df_pie, x="category", label="count",
+    fill="category", palette="npg",
+    title="Pie Chart",
+)
+save(p, "pie_basic", w=600, h=600)
+
+p = lpp.ggdonutchart(
+    df_pie, x="category", label="count",
+    fill="category", palette="npg", hole=0.4,
+    title="Donut Chart",
+)
+save(p, "donut_basic", w=600, h=600)
+
+# 9. Q-Q plot
+p = lpp.ggqqplot(
+    df_qq, x="value", add="qqline",
+    title="Q-Q Plot (Normal Data)",
+)
+save(p, "qqplot_basic")
+
+p = lpp.ggqqplot(
+    df_qq_group, x="value",
+    color="group", fill="group", add="qqline", palette="npg",
+    title="Grouped Q-Q Plot",
+)
+save(p, "qqplot_group")
+
+# 10. ECDF
+p = lpp.ggecdf(
+    df_ecdf, x="value", color="group", palette="npg",
+    title="Empirical CDF",
+)
+save(p, "ecdf_basic")
+
+# 11. Correlation heatmap
+p = lpp.ggcorr(
+    df_corr, method="pearson",
+    p_low="*", p_high="ns",
+    title="Correlation Matrix",
+)
+save(p, "corrplot_basic", w=600, h=600)
+
+# 12. PCA clustering
+p = lpp.ggscatter(
+    df_pca, x="PC1", y="PC2",
+    color="group", fill="group", palette="npg", size=3,
+    ellipse=True, ellipse_level=0.95, ellipse_type="norm", ellipse_alpha=0.15,
+    rug=True, cor=True, cor_method="pearson", cor_size=12,
+    title="PCA Clustering with 95% Confidence Ellipses",
+)
+save(p, "pca_clustering", w=700, h=600)
+
+print("\nAll images generated successfully!")
