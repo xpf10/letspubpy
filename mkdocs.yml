@@ -53,9 +53,7 @@ plugins:
             show_docstring_returns: true
             show_docstring_raises: false
             show_docstring_examples: true
-            show_docstring_note: true
             show_docstring_warning: false
-            show_docstring_usage: false
 
 markdown_extensions:
   - admonition
