@@ -64,11 +64,15 @@ def theme_pubr(base_size=12, base_family=None, legend="top", border=False):
         
     return t
 
-def get_palette(palette_name):
+def get_palette(palette_name, n=None):
     """Resolve a palette name or list to a list of colors."""
     if isinstance(palette_name, list):
-        return palette_name
-    return PALETTES.get(palette_name.lower(), [palette_name])
+        colors = palette_name
+    else:
+        colors = PALETTES.get(str(palette_name).lower(), [palette_name])
+    if n is not None and n > len(colors):
+        colors = (colors * ((n // len(colors)) + 1))[:n]
+    return colors
 
 def scale_color_pubr(palette="npg", **kwargs):
     """Scale color manually using a pubr palette."""

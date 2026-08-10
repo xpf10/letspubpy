@@ -1835,43 +1835,39 @@ ggvisCluster = visCluster
 
 def sim_pseudotime_data(n_genes=80, n_pts=50, n_clusters=4, seed=42):
     """
-    Simulate single-cell RNA-seq pseudotime trajectory gene expression matrix.
+    Simulate single-cell RNA-seq pseudotime trajectory gene expression matrix with customizable n_clusters (包含可自定义聚类数量).
     Useful for Monocle-style pseudotime heatmaps (拟时序热图).
     """
     np.random.seed(seed)
     t = np.linspace(0, 100, n_pts)
-    genes_per_cluster = n_genes // n_clusters
+    n_clusters = max(1, int(n_clusters))
+    genes_per_cluster = max(1, n_genes // n_clusters)
     
     data = []
     gene_names = []
+    sigma = 220.0 / (n_clusters ** 0.7)
     
-    # C1: Early response / Stemness (Decaying)
-    for i in range(genes_per_cluster):
-        decay = np.exp(-t / (15 + np.random.uniform(-3, 3)))
-        noise = np.random.normal(0, 0.08, n_pts)
-        data.append(decay + noise)
-        gene_names.append(f'Early_Gene_{i+1:02d}')
+    for c_idx in range(1, n_clusters + 1):
+        center = (c_idx - 1) / max(1, n_clusters - 1) * 100.0
         
-    # C2: Early-Mid Transition (Peak ~ 30)
-    for i in range(genes_per_cluster):
-        peak = np.exp(-((t - (30 + np.random.uniform(-5, 5)))**2) / 250)
-        noise = np.random.normal(0, 0.08, n_pts)
-        data.append(peak + noise)
-        gene_names.append(f'Mid1_Gene_{i+1:02d}')
-
-    # C3: Mid-Late Transition (Peak ~ 65)
-    for i in range(genes_per_cluster):
-        peak = np.exp(-((t - (65 + np.random.uniform(-5, 5)))**2) / 250)
-        noise = np.random.normal(0, 0.08, n_pts)
-        data.append(peak + noise)
-        gene_names.append(f'Mid2_Gene_{i+1:02d}')
-
-    # C4: Late Terminal Differentiation (Rising)
-    for i in range(genes_per_cluster):
-        rise = 1.0 / (1.0 + np.exp(-(t - (75 + np.random.uniform(-5, 5))) / 10))
-        noise = np.random.normal(0, 0.08, n_pts)
-        data.append(rise + noise)
-        gene_names.append(f'Late_Gene_{i+1:02d}')
+        for i in range(genes_per_cluster):
+            jitter_center = center + np.random.uniform(-4, 4)
+            if c_idx == 1:
+                # Early response / Stemness (Decaying)
+                pattern = np.exp(-t / (16 + np.random.uniform(-3, 3)))
+                prefix = 'Early'
+            elif c_idx == n_clusters:
+                # Late terminal differentiation (Rising)
+                pattern = 1.0 / (1.0 + np.exp(-(t - (78 + np.random.uniform(-4, 4))) / 10.0))
+                prefix = 'Late'
+            else:
+                # Mid transition pulse peak
+                pattern = np.exp(-((t - jitter_center)**2) / sigma)
+                prefix = f'Mid{c_idx-1}'
+                
+            noise = np.random.normal(0, 0.08, n_pts)
+            data.append(pattern + noise)
+            gene_names.append(f'{prefix}_Gene_{i+1:02d}')
 
     col_names = [f'Pt_{int(pt)}' for pt in t]
     df = pd.DataFrame(data, index=gene_names, columns=col_names)
