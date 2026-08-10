@@ -19,6 +19,16 @@ from .plots import (
     ggqqplot,
     ggecdf,
     ggcorr,
+    ggheatmap,
+    ggclustergram,
+    ggclustervis,
+    ggheatmap_cluster,
+    visCluster,
+    ggvisCluster,
+    sim_pseudotime_data,
+    sim_pseudotime,
+    visPseudotime,
+    ggpseudotime,
     rremove,
     ggpar,
     confidence_ellipse_points,
@@ -42,7 +52,10 @@ if 'ggplot' in __all__:
 __all__.extend([
     'ggplot', 'PubPlotSpec', 'ggboxplot', 'ggviolin', 'ggdotplot', 'ggstripchart',
     'ggbarplot', 'ggline', 'ggscatter', 'gghistogram', 'ggdensity', 'ggpie',
-    'ggdonutchart', 'ggqqplot', 'ggecdf', 'ggcorr', 'rremove', 'ggpar',
+    'ggdonutchart', 'ggqqplot', 'ggecdf', 'ggcorr',
+    'ggheatmap', 'ggclustergram', 'ggclustervis', 'ggheatmap_cluster', 'visCluster', 'ggvisCluster',
+    'sim_pseudotime_data', 'sim_pseudotime', 'visPseudotime', 'ggpseudotime',
+    'rremove', 'ggpar',
     'theme_pubr', 'scale_color_pubr', 'scale_fill_pubr',
     'stat_compare_means', 'add_stat_compare_means', 'stat_cor', 'stat_regline_equation',
     'ggarrange',
@@ -50,3 +63,4 @@ __all__.extend([
     'confidence_ellipse_points', 'build_ellipse_df', 'compute_correlation',
     'get_color_fill_aes_and_params', 'apply_labels_and_theme', 'add_extra_layers'
 ])
+

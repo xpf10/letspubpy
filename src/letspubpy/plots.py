@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 from scipy import stats as _scipy_stats
+from scipy.spatial.distance import pdist as _pdist
+from scipy.cluster.hierarchy import linkage as _linkage, dendrogram as _dendrogram, fcluster as _fcluster
 from lets_plot import (
     ggplot as _ggplot,
     geom_boxplot,
@@ -19,6 +21,7 @@ from lets_plot import (
     geom_text,
     geom_blank,
     geom_tile,
+    geom_ribbon,
     geom_qq,
     geom_qq2,
     geom_qq_line,
@@ -31,10 +34,13 @@ from lets_plot import (
     xlab as _xlab,
     ylab as _ylab,
     scale_x_discrete,
+    scale_y_discrete,
     scale_y_continuous,
     scale_x_continuous,
     scale_fill_gradient2,
+    facet_grid,
     theme,
+    element_blank,
     layer_labels
 )
 from lets_plot.plot.core import PlotSpec
@@ -1337,3 +1343,577 @@ def ggpar(plot, title=None, xlab=None, ylab=None,
         plot = plot + base_theme
 
     return plot
+
+
+# ==============================================================================
+# ggheatmap / ggclustergram / ggclustervis — Publication-ready Clustered Heatmap
+# ==============================================================================
+
+def ggheatmap(data, x=None, y=None, fill=None,
+              scale="none",
+              cluster_rows=False, cluster_cols=False,
+              metric="euclidean", method="complete",
+              palette="bwr", low=None, mid=None, high=None, midpoint=0,
+              show_values=False, digits=2, value_color="black", value_size=3,
+              cell_border="white", cell_size=0.5,
+              title=None, xlab=None, ylab=None,
+              show_legend=True, ggtheme=None):
+    """Create a publication-ready heatmap with optional hierarchical clustering and scaling.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Matrix DataFrame (index=rows, columns=cols) or long-format DataFrame with x, y, fill columns.
+    x : str, optional
+        Column name for X axis (columns) if data is in long format.
+    y : str, optional
+        Column name for Y axis (rows) if data is in long format.
+    fill : str, optional
+        Column name for cell values if data is in long format.
+    scale : str
+        Data scaling: ``"none"``, ``"row"`` (row z-score), or ``"column"`` (column z-score).
+    cluster_rows : bool
+        Whether to hierarchically cluster rows.
+    cluster_cols : bool
+        Whether to hierarchically cluster columns.
+    metric : str
+        Distance metric for scipy pdist (e.g., ``"euclidean"``, ``"correlation"``, ``"cosine"``).
+    method : str
+        Linkage method for scipy linkage (e.g., ``"complete"``, ``"ward"``, ``"average"``).
+    palette : str
+        Color scheme: ``"bwr"`` (blue-white-red), ``"npg"``, ``"coolwarm"``, ``"rdbu"``, ``"nejm"``, ``"viridis"``, ``"magma"``, ``"plasma"``.
+    low, mid, high : str, optional
+        Custom colors for lower, middle, and upper gradient bounds.
+    midpoint : float
+        Midpoint value for diverging color gradients (default 0).
+    show_values : bool
+        Whether to render numeric text values inside heatmap cells.
+    digits : int
+        Decimal places for displayed values.
+    value_color : str
+        Color of value text labels.
+    value_size : float
+        Font size of value text labels.
+    cell_border : str
+        Color of cell border lines.
+    cell_size : float
+        Thickness of cell border lines.
+    title, xlab, ylab : str, optional
+        Labels for plot.
+    show_legend : bool
+        Whether to display legend.
+    ggtheme : object, optional
+        Custom theme.
+    """
+    df_raw = data.copy()
+
+    # Convert long format to wide matrix if x, y, fill provided
+    if x is not None and y is not None and fill is not None:
+        mat = df_raw.pivot(index=y, columns=x, values=fill)
+    else:
+        # Matrix DataFrame
+        mat = df_raw.select_dtypes(include=[np.number]).copy()
+
+    # Standardize / Scale
+    if scale == "row":
+        mean = mat.mean(axis=1)
+        std = mat.std(axis=1).replace(0, 1)
+        mat = mat.sub(mean, axis=0).div(std, axis=0)
+    elif scale == "column":
+        mean = mat.mean(axis=0)
+        std = mat.std(axis=0).replace(0, 1)
+        mat = mat.sub(mean, axis=1).div(std, axis=1)
+    elif scale != "none":
+        raise ValueError(f"Unknown scale option: '{scale}'. Choose 'none', 'row', or 'column'.")
+
+    # Row Clustering
+    row_order = mat.index.tolist()
+    if cluster_rows and mat.shape[0] > 1:
+        row_dists = _pdist(mat.values, metric=metric)
+        row_linkage = _linkage(row_dists, method=method)
+        row_dendro = _dendrogram(row_linkage, no_plot=True)
+        row_order = [mat.index[i] for i in row_dendro['leaves']]
+
+    # Column Clustering
+    col_order = mat.columns.tolist()
+    if cluster_cols and mat.shape[1] > 1:
+        col_dists = _pdist(mat.values.T, metric=metric)
+        col_linkage = _linkage(col_dists, method=method)
+        col_dendro = _dendrogram(col_linkage, no_plot=True)
+        col_order = [mat.columns[i] for i in col_dendro['leaves']]
+
+    # Reorder matrix
+    mat_ordered = mat.loc[row_order, col_order]
+
+    if mat_ordered.index.name is None:
+        mat_ordered.index.name = 'Row'
+    row_col_name = mat_ordered.index.name
+    # Convert to long format for geom_tile
+    long_df = mat_ordered.reset_index().melt(id_vars=row_col_name,
+                                             var_name='Col',
+                                             value_name='Value')
+    long_df['label_str'] = long_df['Value'].apply(lambda v: f"{v:.{digits}f}" if pd.notnull(v) else "")
+
+    # Build plot
+    mapping = aes(x='Col', y=row_col_name, fill='Value')
+    p = ggplot(long_df, mapping)
+
+    tile_params = {'width': 1.0, 'height': 1.0}
+    if cell_border:
+        tile_params['color'] = cell_border
+    if cell_size:
+        tile_params['size'] = cell_size
+
+    p += geom_tile(aes(x='Col', y=row_col_name, fill='Value'), **tile_params)
+
+    if show_values:
+        p += geom_text(aes(x='Col', y=row_col_name, label='label_str'),
+                       color=value_color, size=value_size)
+
+    # Color palettes
+    if low or mid or high:
+        c_low = low or "#2166AC"
+        c_mid = mid or "#F7F7F7"
+        c_high = high or "#B2182B"
+        p += scale_fill_gradient2(low=c_low, mid=c_mid, high=c_high, midpoint=midpoint)
+    elif palette == "bwr" or palette == "rdbu":
+        p += scale_fill_gradient2(low="#2166AC", mid="#F7F7F7", high="#B2182B", midpoint=midpoint)
+    elif palette == "npg" or palette == "coolwarm":
+        p += scale_fill_gradient2(low="#3C5488", mid="#F7F7F7", high="#E64B35", midpoint=midpoint)
+    elif palette == "nejm":
+        p += scale_fill_gradient2(low="#0072B5", mid="#F7F7F7", high="#BC3C29", midpoint=midpoint)
+    elif palette in ("viridis", "magma", "plasma"):
+        from lets_plot import scale_fill_viridis
+        p += scale_fill_viridis(option=palette)
+    else:
+        p += scale_fill_gradient2(low="#2166AC", mid="#F7F7F7", high="#B2182B", midpoint=midpoint)
+
+    p += scale_x_discrete(limits=col_order, expand=[0, 0])
+    p += scale_y_discrete(limits=row_order, expand=[0, 0])
+
+    theme_obj = ggtheme if ggtheme is not None else theme_pubr()
+    if not show_legend:
+        theme_obj += theme(legend_position='none')
+
+    p += theme_obj
+
+    if title:
+        p += ggtitle(title)
+    if xlab:
+        p += _xlab(xlab)
+    if ylab:
+        p += _ylab(ylab)
+
+    return p
+
+
+def ggclustergram(data, scale="row", cluster_rows=True, cluster_cols=True, **kwargs):
+    """Create a publication-ready clustered heatmap (clustergram / clustervis)."""
+    return ggheatmap(data, scale=scale, cluster_rows=cluster_rows, cluster_cols=cluster_cols, **kwargs)
+
+ggclustervis = ggclustergram
+ggheatmap_cluster = ggclustergram
+
+
+# ==============================================================================
+# visCluster / ggvisCluster — ClusterGVis-style dual view (Heatmap + Trend Lines)
+# ==============================================================================
+
+def visCluster(data,
+               n_clusters=4,
+               scale="row",
+               plot_type="both",
+               trend_position="left",
+               cluster_method="hierarchical",
+               palette="bwr",
+               cluster_palette="npg",
+               metric="euclidean",
+               method="ward",
+               title=None,
+               xlab=None,
+               ylab=None,
+               show_legend=True,
+               ggtheme=None):
+    """ClusterGVis-style cluster visualization combining heatmaps and cluster expression trend lines.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Matrix DataFrame (index=genes/rows, columns=samples/timepoints).
+    n_clusters : int
+        Number of cluster groups (default 4).
+    scale : str
+        Scaling method: ``"row"`` (z-score), ``"column"``, or ``"none"``.
+    plot_type : str
+        Visualization layout: ``"both"`` (heatmap + line plot side-by-side), ``"heatmap"``, or ``"line"``.
+    cluster_method : str
+        Clustering algorithm: ``"hierarchical"`` or ``"kmeans"``.
+    palette : str
+        Heatmap palette name (e.g. ``"bwr"``, ``"coolwarm"``, ``"npg"``, ``"nejm"``).
+    cluster_palette : str
+        Palette for cluster trend lines (e.g. ``"npg"``, ``"aaas"``, ``"jco"``).
+    metric : str
+        Distance metric for scipy pdist (e.g., ``"euclidean"``, ``"correlation"``).
+    method : str
+        Linkage method for scipy linkage (e.g., ``"ward"``, ``"complete"``, ``"average"``).
+    title, xlab, ylab : str, optional
+        Plot labels.
+    show_legend : bool
+        Whether to show legend.
+    ggtheme : object, optional
+        Custom theme.
+    """
+    df_raw = data.select_dtypes(include=[np.number]).copy()
+
+    # Standardize / Scale
+    if scale == "row":
+        mean = df_raw.mean(axis=1)
+        std = df_raw.std(axis=1).replace(0, 1)
+        mat = df_raw.sub(mean, axis=0).div(std, axis=0)
+    elif scale == "column":
+        mean = df_raw.mean(axis=0)
+        std = df_raw.std(axis=0).replace(0, 1)
+        mat = df_raw.sub(mean, axis=1).div(std, axis=1)
+    else:
+        mat = df_raw.copy()
+
+    # Cluster assignment
+    if mat.shape[0] >= n_clusters:
+        row_dists = _pdist(mat.values, metric=metric)
+        row_linkage = _linkage(row_dists, method=method)
+        clusters = _fcluster(row_linkage, t=n_clusters, criterion='maxclust')
+    else:
+        clusters = np.arange(1, mat.shape[0] + 1)
+
+    mat['Cluster'] = [f'C{c}' for c in clusters]
+    df_sorted = mat.sort_values(by='Cluster')
+    col_names = [c for c in df_sorted.columns if c != 'Cluster']
+
+    # Build Heatmap
+    p_heat = None
+    if plot_type in ("both", "heatmap"):
+        df_heat_mat = df_sorted.drop(columns=['Cluster'])
+        reset_heat = df_heat_mat.reset_index()
+        gene_col = 'index' if 'index' in reset_heat.columns else df_heat_mat.index.name or 'index'
+        long_heat = reset_heat.melt(id_vars=gene_col, var_name='Timepoint', value_name='Expression')
+        long_heat.rename(columns={gene_col: 'Gene'}, inplace=True)
+        long_heat['Cluster'] = long_heat['Gene'].map(mat['Cluster'])
+        long_heat['Gene'] = pd.Categorical(long_heat['Gene'], categories=df_sorted.index.tolist(), ordered=True)
+
+        p_heat = ggplot(long_heat, aes(x='Timepoint', y='Gene', fill='Expression'))
+        p_heat += geom_tile(width=1.0, height=1.0, color='white', size=0.2)
+
+        if palette in ("bwr", "rdbu"):
+            p_heat += scale_fill_gradient2(low="#2166AC", mid="#F7F7F7", high="#B2182B", midpoint=0)
+        elif palette in ("npg", "coolwarm"):
+            p_heat += scale_fill_gradient2(low="#3C5488", mid="#F7F7F7", high="#E64B35", midpoint=0)
+        elif palette == "nejm":
+            p_heat += scale_fill_gradient2(low="#0072B5", mid="#F7F7F7", high="#BC3C29", midpoint=0)
+        else:
+            p_heat += scale_fill_gradient2(low="#2166AC", mid="#F7F7F7", high="#B2182B", midpoint=0)
+
+        p_heat += scale_x_discrete(limits=col_names, expand=[0, 0])
+        p_heat += scale_y_discrete(expand=[0, 0])
+        p_heat += facet_grid(y='Cluster', scales='free_y')
+
+        theme_h = ggtheme if ggtheme is not None else theme_pubr()
+        if not show_legend:
+            theme_h += theme(legend_position='none')
+        p_heat += theme_h
+        if title:
+            p_heat += ggtitle(f"{title} - Heatmap")
+        if xlab:
+            p_heat += _xlab(xlab)
+        if ylab:
+            p_heat += _ylab(ylab)
+
+    # Build Line Trend Plot
+    p_line = None
+    if plot_type in ("both", "line"):
+        reset_mat = mat.reset_index()
+        gene_col_name = 'index' if 'index' in reset_mat.columns else mat.index.name or 'Gene'
+        if gene_col_name in reset_mat.columns:
+            reset_mat.rename(columns={gene_col_name: 'Gene'}, inplace=True)
+            gene_col_name = 'Gene'
+
+        long_line = reset_mat.melt(id_vars=[gene_col_name, 'Cluster'], var_name='Timepoint', value_name='Expression')
+
+        agg_df = long_line.groupby(['Cluster', 'Timepoint'], as_index=False).agg(
+            mean_val=('Expression', 'mean'),
+            sd_val=('Expression', 'std')
+        )
+        agg_df['sd_val'] = agg_df['sd_val'].fillna(0)
+        agg_df['ymin'] = agg_df['mean_val'] - agg_df['sd_val']
+        agg_df['ymax'] = agg_df['mean_val'] + agg_df['sd_val']
+
+        p_line = ggplot(agg_df, aes(x='Timepoint', y='mean_val', group='Cluster', color='Cluster', fill='Cluster'))
+        p_line += geom_ribbon(aes(ymin='ymin', ymax='ymax'), alpha=0.2, color='blank')
+        p_line += geom_line(size=1.2)
+        p_line += geom_point(size=2.5)
+        p_line += scale_x_discrete(limits=col_names)
+        p_line += facet_grid(y='Cluster', scales='free_y')
+
+        theme_l = ggtheme if ggtheme is not None else theme_pubr()
+        if not show_legend:
+            theme_l += theme(legend_position='none')
+        p_line += theme_l
+        p_line += scale_color_pubr(cluster_palette)
+        p_line += scale_fill_pubr(cluster_palette)
+        if title:
+            p_line += ggtitle(f"{title} - Trends")
+        if xlab:
+            p_line += _xlab(xlab)
+        p_line += _ylab("Expression (Mean ± SD)")
+
+    if plot_type == "overlay":
+        df_heat_mat = df_sorted.drop(columns=['Cluster'])
+        reset_heat = df_heat_mat.reset_index()
+        gene_col = 'index' if 'index' in reset_heat.columns else df_heat_mat.index.name or 'index'
+        long_heat = reset_heat.melt(id_vars=gene_col, var_name='Timepoint', value_name='Expression')
+        long_heat.rename(columns={gene_col: 'Gene'}, inplace=True)
+        long_heat['Cluster'] = long_heat['Gene'].map(mat['Cluster'])
+        long_heat['Gene'] = pd.Categorical(long_heat['Gene'], categories=df_sorted.index.tolist(), ordered=True)
+
+        agg_df = long_heat.groupby(['Cluster', 'Timepoint'], as_index=False).agg(mean_val=('Expression', 'mean'))
+
+        cluster_overlay_lines = []
+        for c_id, group in df_sorted.groupby('Cluster'):
+            gene_list = group.index.tolist()
+            c_agg = agg_df[agg_df['Cluster'] == c_id].copy()
+            vals = c_agg['mean_val'].values
+            min_v, max_v = vals.min(), vals.max()
+            rng = (max_v - min_v) if max_v != min_v else 1.0
+            indices = [gene_list[int(round(idx))] for idx in (vals - min_v) / rng * (len(gene_list) - 1)]
+            c_agg['Gene'] = pd.Categorical(indices, categories=df_sorted.index.tolist(), ordered=True)
+            cluster_overlay_lines.append(c_agg)
+
+        df_trend_overlay = pd.concat(cluster_overlay_lines)
+
+        p_overlay = ggplot()
+        p_overlay += geom_tile(data=long_heat, mapping=aes(x='Timepoint', y='Gene', fill='Expression'),
+                               width=1.0, height=1.0, color='white', size=0.2)
+        p_overlay += geom_line(data=df_trend_overlay, mapping=aes(x='Timepoint', y='Gene', group='Cluster'),
+                                color='black', size=2.5)
+        p_overlay += geom_line(data=df_trend_overlay, mapping=aes(x='Timepoint', y='Gene', group='Cluster'),
+                                color='#FFD700', size=1.2)
+        p_overlay += geom_point(data=df_trend_overlay, mapping=aes(x='Timepoint', y='Gene'),
+                                 color='#FFD700', size=3.5)
+
+        if palette in ("bwr", "rdbu"):
+            p_overlay += scale_fill_gradient2(low="#2166AC", mid="#F7F7F7", high="#B2182B", midpoint=0)
+        elif palette in ("npg", "coolwarm"):
+            p_overlay += scale_fill_gradient2(low="#3C5488", mid="#F7F7F7", high="#E64B35", midpoint=0)
+        elif palette == "nejm":
+            p_overlay += scale_fill_gradient2(low="#0072B5", mid="#F7F7F7", high="#BC3C29", midpoint=0)
+        else:
+            p_overlay += scale_fill_gradient2(low="#2166AC", mid="#F7F7F7", high="#B2182B", midpoint=0)
+
+        p_overlay += scale_x_discrete(limits=col_names, expand=[0, 0])
+        p_overlay += scale_y_discrete(expand=[0, 0])
+        p_overlay += facet_grid(y='Cluster', scales='free_y')
+
+        theme_o = ggtheme if ggtheme is not None else theme_pubr()
+        if not show_legend:
+            theme_o += theme(legend_position='none')
+        p_overlay += theme_o
+        if title:
+            p_overlay += ggtitle(title)
+        if xlab:
+            p_overlay += _xlab(xlab)
+        if ylab:
+            p_overlay += _ylab(ylab)
+
+        return p_overlay
+
+    if plot_type == "joined":
+        df_heat_mat = df_sorted.drop(columns=['Cluster'])
+        reset_heat = df_heat_mat.reset_index()
+        gene_col = 'index' if 'index' in reset_heat.columns else df_heat_mat.index.name or 'index'
+        long_heat = reset_heat.melt(id_vars=gene_col, var_name='Timepoint', value_name='Expression')
+        long_heat.rename(columns={gene_col: 'Gene'}, inplace=True)
+        long_heat['Cluster'] = long_heat['Gene'].map(mat['Cluster'])
+        long_heat['Gene'] = pd.Categorical(long_heat['Gene'], categories=df_sorted.index.tolist(), ordered=True)
+
+        trend_cols = [f'T_{tp}' for tp in col_names]
+        all_x_limits = trend_cols + col_names + ['Cluster', ' ']
+        x_labels = col_names + col_names + ['Cluster', ' ']
+
+        long_heat['X_pos'] = long_heat['Timepoint']
+
+        df_cluster_bar = pd.DataFrame({
+            'Gene': pd.Categorical(df_sorted.index.tolist(), categories=df_sorted.index.tolist(), ordered=True),
+            'Cluster': df_sorted['Cluster'].values,
+            'X_pos': 'Cluster'
+        })
+
+        agg_df = long_heat.groupby(['Cluster', 'Timepoint'], as_index=False).agg(mean_val=('Expression', 'mean'))
+
+        cluster_overlay_lines = []
+        for c_id, group in df_sorted.groupby('Cluster'):
+            gene_list = group.index.tolist()
+            c_agg = agg_df[agg_df['Cluster'] == c_id].copy()
+            vals = c_agg['mean_val'].values
+            min_v, max_v = vals.min(), vals.max()
+            rng = (max_v - min_v) if max_v != min_v else 1.0
+            indices = [gene_list[int(round(idx))] for idx in (vals - min_v) / rng * (len(gene_list) - 1)]
+            c_agg['Gene'] = pd.Categorical(indices, categories=df_sorted.index.tolist(), ordered=True)
+            c_agg['X_pos'] = c_agg['Timepoint'].apply(lambda tp: f'T_{tp}')
+            cluster_overlay_lines.append(c_agg)
+
+        df_trend_left = pd.concat(cluster_overlay_lines)
+
+        p_joined = ggplot()
+        p_joined += geom_tile(data=long_heat, mapping=aes(x='X_pos', y='Gene', fill='Expression'),
+                              width=1.0, height=1.0, color='white', size=0.2)
+        p_joined += geom_point(data=df_cluster_bar, mapping=aes(x='X_pos', y='Gene', color='Cluster'),
+                                shape=15, size=26.0)
+
+        cluster_text_rows = []
+        for c_id, group in df_sorted.groupby('Cluster'):
+            g_list = group.index.tolist()
+            mid_g = g_list[len(g_list) // 2]
+            cluster_text_rows.append({
+                'Gene': mid_g,
+                'Cluster': c_id,
+                'X_pos': 'Cluster',
+                'Text': c_id
+            })
+        df_cluster_text = pd.DataFrame(cluster_text_rows)
+        df_cluster_text['Gene'] = pd.Categorical(df_cluster_text['Gene'], categories=df_sorted.index.tolist(), ordered=True)
+
+        p_joined += geom_text(data=df_cluster_text, mapping=aes(x='X_pos', y='Gene', label='Text'),
+                               color='white', size=11, fontface='bold', angle=90)
+
+        p_joined += geom_line(data=df_trend_left, mapping=aes(x='X_pos', y='Gene', group='Cluster', color='Cluster'),
+                               size=2.5)
+        p_joined += geom_point(data=df_trend_left, mapping=aes(x='X_pos', y='Gene', color='Cluster'),
+                                size=4.0)
+
+        if palette in ("bwr", "rdbu"):
+            p_joined += scale_fill_gradient2(low="#2166AC", mid="#F7F7F7", high="#B2182B", midpoint=0)
+        elif palette in ("npg", "coolwarm"):
+            p_joined += scale_fill_gradient2(low="#3C5488", mid="#F7F7F7", high="#E64B35", midpoint=0)
+        elif palette == "nejm":
+            p_joined += scale_fill_gradient2(low="#0072B5", mid="#F7F7F7", high="#BC3C29", midpoint=0)
+        else:
+            p_joined += scale_fill_gradient2(low="#2166AC", mid="#F7F7F7", high="#B2182B", midpoint=0)
+
+        p_joined += scale_color_pubr(cluster_palette)
+        p_joined += scale_x_discrete(limits=all_x_limits, labels=x_labels, expand=[0, 0])
+        p_joined += scale_y_discrete(expand=[0, 0])
+        p_joined += facet_grid(y='Cluster', scales='free_y')
+
+        theme_j = ggtheme if ggtheme is not None else theme_pubr()
+        theme_j += theme(strip_text=element_blank(), strip_background=element_blank())
+        if len(df_sorted) > 50:
+            theme_j += theme(axis_text_y=element_blank(), axis_ticks_y=element_blank())
+        if not show_legend:
+            theme_j += theme(legend_position='none')
+        p_joined += theme_j
+        if title:
+            p_joined += ggtitle(title)
+        if xlab:
+            p_joined += _xlab(xlab)
+        if ylab:
+            p_joined += _ylab(ylab)
+
+        return p_joined
+
+    if plot_type == "heatmap":
+        return p_heat
+    elif plot_type == "line":
+        return p_line
+    else:
+        from .arrange import ggarrange
+        if trend_position == "left":
+            return ggarrange(p_line, p_heat, ncol=2, common_legend=False)
+        else:
+            return ggarrange(p_heat, p_line, ncol=2, common_legend=False)
+
+ggvisCluster = visCluster
+
+
+def sim_pseudotime_data(n_genes=80, n_pts=50, n_clusters=4, seed=42):
+    """
+    Simulate single-cell RNA-seq pseudotime trajectory gene expression matrix.
+    Useful for Monocle-style pseudotime heatmaps (拟时序热图).
+    """
+    np.random.seed(seed)
+    t = np.linspace(0, 100, n_pts)
+    genes_per_cluster = n_genes // n_clusters
+    
+    data = []
+    gene_names = []
+    
+    # C1: Early response / Stemness (Decaying)
+    for i in range(genes_per_cluster):
+        decay = np.exp(-t / (15 + np.random.uniform(-3, 3)))
+        noise = np.random.normal(0, 0.08, n_pts)
+        data.append(decay + noise)
+        gene_names.append(f'Early_Gene_{i+1:02d}')
+        
+    # C2: Early-Mid Transition (Peak ~ 30)
+    for i in range(genes_per_cluster):
+        peak = np.exp(-((t - (30 + np.random.uniform(-5, 5)))**2) / 250)
+        noise = np.random.normal(0, 0.08, n_pts)
+        data.append(peak + noise)
+        gene_names.append(f'Mid1_Gene_{i+1:02d}')
+
+    # C3: Mid-Late Transition (Peak ~ 65)
+    for i in range(genes_per_cluster):
+        peak = np.exp(-((t - (65 + np.random.uniform(-5, 5)))**2) / 250)
+        noise = np.random.normal(0, 0.08, n_pts)
+        data.append(peak + noise)
+        gene_names.append(f'Mid2_Gene_{i+1:02d}')
+
+    # C4: Late Terminal Differentiation (Rising)
+    for i in range(genes_per_cluster):
+        rise = 1.0 / (1.0 + np.exp(-(t - (75 + np.random.uniform(-5, 5))) / 10))
+        noise = np.random.normal(0, 0.08, n_pts)
+        data.append(rise + noise)
+        gene_names.append(f'Late_Gene_{i+1:02d}')
+
+    col_names = [f'Pt_{int(pt)}' for pt in t]
+    df = pd.DataFrame(data, index=gene_names, columns=col_names)
+    return df
+
+sim_pseudotime = sim_pseudotime_data
+
+
+def visPseudotime(
+    data=None,
+    n_clusters=4,
+    scale='row',
+    plot_type='joined',
+    cluster_palette='npg',
+    palette='bwr',
+    title='Monocle Single-Cell Pseudotime Trajectory Heatmap',
+    xlab='Pseudotime Continuum (Cell Differentiation)',
+    ylab='Gene',
+    **kwargs
+):
+    """
+    Visualize single-cell RNA-seq pseudotime trajectory heatmaps (拟时序热图).
+    If data is None, automatically simulates high-quality pseudotime data using sim_pseudotime_data().
+    """
+    if data is None:
+        data = sim_pseudotime_data(n_genes=80, n_pts=40, n_clusters=n_clusters)
+        
+    return visCluster(
+        data,
+        n_clusters=n_clusters,
+        scale=scale,
+        plot_type=plot_type,
+        cluster_palette=cluster_palette,
+        palette=palette,
+        title=title,
+        xlab=xlab,
+        ylab=ylab,
+        **kwargs
+    )
+
+ggpseudotime = visPseudotime
+
+
+
+
