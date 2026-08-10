@@ -3,6 +3,7 @@ import pandas as pd
 from scipy import stats as _scipy_stats
 from scipy.spatial.distance import pdist as _pdist
 from scipy.cluster.hierarchy import linkage as _linkage, dendrogram as _dendrogram, fcluster as _fcluster
+from scipy.ndimage import gaussian_filter1d as _gaussian_filter1d
 from lets_plot import (
     ggplot as _ggplot,
     geom_boxplot,
@@ -1763,8 +1764,14 @@ def visCluster(data,
         df_trend_left = pd.concat(cluster_overlay_lines)
 
         p_joined = ggplot()
-        p_joined += geom_tile(data=long_heat, mapping=aes(x='X_pos', y='Gene', fill='Expression'),
-                              width=1.0, height=1.0, color='white', size=0.2)
+        is_dense_cols = len(col_names) >= 15
+        if is_dense_cols:
+            p_joined += geom_tile(data=long_heat, mapping=aes(x='X_pos', y='Gene', fill='Expression'),
+                                  width=1.05, height=1.05)
+        else:
+            p_joined += geom_tile(data=long_heat, mapping=aes(x='X_pos', y='Gene', fill='Expression'),
+                                  width=1.0, height=1.0, color='white', size=0.2)
+
         p_joined += geom_point(data=df_cluster_bar, mapping=aes(x='X_pos', y='Gene', color='Cluster'),
                                 shape=15, size=26.0)
 
@@ -1785,9 +1792,10 @@ def visCluster(data,
                                color='white', size=11, fontface='bold', angle=90)
 
         p_joined += geom_line(data=df_trend_left, mapping=aes(x='X_pos', y='Gene', group='Cluster', color='Cluster'),
-                               size=2.5)
-        p_joined += geom_point(data=df_trend_left, mapping=aes(x='X_pos', y='Gene', color='Cluster'),
-                                size=4.0)
+                               size=3.0 if is_dense_cols else 2.5)
+        if not is_dense_cols:
+            p_joined += geom_point(data=df_trend_left, mapping=aes(x='X_pos', y='Gene', color='Cluster'),
+                                    size=4.0)
 
         if palette in ("bwr", "rdbu"):
             p_joined += scale_fill_gradient2(low="#2166AC", mid="#F7F7F7", high="#B2182B", midpoint=0)
@@ -1865,8 +1873,9 @@ def sim_pseudotime_data(n_genes=80, n_pts=50, n_clusters=4, seed=42):
                 pattern = np.exp(-((t - jitter_center)**2) / sigma)
                 prefix = f'Mid{c_idx-1}'
                 
-            noise = np.random.normal(0, 0.08, n_pts)
-            data.append(pattern + noise)
+            noise = np.random.normal(0, 0.05, n_pts)
+            smooth_curve = _gaussian_filter1d(pattern + noise, sigma=2.0)
+            data.append(smooth_curve)
             gene_names.append(f'{prefix}_Gene_{i+1:02d}')
 
     col_names = [f'Pt_{int(pt)}' for pt in t]
