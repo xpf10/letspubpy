@@ -1735,8 +1735,8 @@ def visCluster(data,
         long_heat['Gene'] = pd.Categorical(long_heat['Gene'], categories=df_sorted.index.tolist(), ordered=True)
 
         trend_cols = [f'T_{tp}' for tp in col_names]
-        all_x_limits = trend_cols + col_names + ['Cluster', ' ']
-        x_labels = col_names + col_names + ['Cluster', ' ']
+        all_x_limits = trend_cols + col_names + ['gap_x', 'Cluster', 'end_x']
+        x_labels = col_names + col_names + ['', 'Cluster', '']
 
         long_heat['X_pos'] = long_heat['Timepoint']
 
