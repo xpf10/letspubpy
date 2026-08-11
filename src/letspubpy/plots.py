@@ -2331,6 +2331,7 @@ def visEnrichNetwork(
     cluster_pathways=True,
     n_clusters=3,
     show_hulls=True,
+    pathway_size_by='Count',
     cluster_palette='npg',
     palette='bwr',
     title='Clustered Pathway Enrichment Concept Network (cnetplot)',
@@ -2338,7 +2339,7 @@ def visEnrichNetwork(
 ):
     """
     Visualize Pathway-Gene Concept Network (cnetplot / network图) with pathway clustering analysis.
-    Performs hierarchical clustering on pathway gene-overlap Jaccard distance matrix.
+    Pathway circle node sizes scale dynamically based on enriched hit gene count ('Count') or RichFactor / percentage ('RichFactor').
     """
     if data is None:
         df_enrich = sim_enrichment_data(n_terms=top_n)
@@ -2358,6 +2359,25 @@ def visEnrichNetwork(
         else:
             genes = set([f'{p_name[:3]}_Gene_{j+1:02d}' for j in range(genes_per_term)])
         term_genes[p_name] = genes
+
+    # Calculate proportional node sizes for pathways based on Count or RichFactor
+    pathway_vals = []
+    for p_name in pathways:
+        p_row = df_enrich[df_enrich['Term'] == p_name].iloc[0] if 'Term' in df_enrich.columns else None
+        if pathway_size_by == 'RichFactor' and p_row is not None and 'RichFactor' in p_row:
+            v = float(p_row['RichFactor'])
+        elif p_row is not None and 'Count' in p_row:
+            v = float(p_row['Count'])
+        else:
+            v = float(len(term_genes[p_name]))
+        pathway_vals.append(v)
+
+    min_v, max_v = min(pathway_vals), max(pathway_vals)
+    span = max_v - min_v if max_v > min_v else 1.0
+    pathway_sizes = {
+        p_name: 10.0 + 12.0 * ((val - min_v) / span)
+        for p_name, val in zip(pathways, pathway_vals)
+    }
 
     # Clustering analysis if enabled
     if cluster_pathways and n_terms >= 3:
@@ -2418,7 +2438,7 @@ def visEnrichNetwork(
             'y': py,
             'node_type': 'Pathway',
             'Cluster': f'Cluster {c_id}',
-            'size': 13.0,
+            'size': pathway_sizes[p_name],
             'color_val': p_val,
             'label': p_name
         })
@@ -2476,13 +2496,13 @@ def visEnrichNetwork(
         p_net += geom_point(data=df_nodes[df_nodes['node_type'] == 'Gene'],
                             mapping=aes(x='x', y='y', color='Cluster'), size=5, shape=19)
         p_net += geom_point(data=df_nodes[df_nodes['node_type'] == 'Pathway'],
-                            mapping=aes(x='x', y='y', fill='Cluster'), size=13, shape=21, color='black')
+                            mapping=aes(x='x', y='y', fill='Cluster', size='size'), shape=21, color='black')
         p_net += scale_color_pubr(cluster_palette)
     else:
         p_net += geom_point(data=df_nodes[df_nodes['node_type'] == 'Gene'],
                             mapping=aes(x='x', y='y', fill='color_val'), shape=21, size=6, color='white')
         p_net += geom_point(data=df_nodes[df_nodes['node_type'] == 'Pathway'],
-                            mapping=aes(x='x', y='y', fill='color_val'), shape=21, size=13, color='black')
+                            mapping=aes(x='x', y='y', fill='color_val', size='size'), shape=21, color='black')
         p_net += scale_fill_gradient2(low='#2166AC', mid='#F7F7F7', high='#B2182B', midpoint=0, name='Log2FC / -log10(p)')
 
     p_net += geom_text(data=df_nodes, mapping=aes(x='x', y='y', label='label'), size=8, vjust=-1.2, fontface='bold')
