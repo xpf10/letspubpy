@@ -2326,19 +2326,26 @@ gglollipop_enrich = visEnrichLollipop
 
 
 def _add_concentric_legend(p_net, x_pos, y_pos, min_val, mid_val, max_val, title='Gene Count'):
-    c_df = pd.DataFrame([{'x': x_pos, 'y': y_pos}])
+    # Bottom tangent circles: shift mid and min centers slightly downwards
+    c_max = pd.DataFrame([{'x': x_pos, 'y': y_pos}])
+    c_mid = pd.DataFrame([{'x': x_pos, 'y': y_pos - 0.025}])
+    c_min = pd.DataFrame([{'x': x_pos, 'y': y_pos - 0.05}])
+    
+    y_top_max = y_pos + 0.30
+    y_top_mid = y_pos + 0.16
+    y_top_min = y_pos + 0.03
     
     lines_df = pd.DataFrame([
-        {'x': x_pos, 'y': y_pos + 0.45, 'xend': x_pos + 1.2, 'yend': y_pos + 0.45, 'label': str(int(max_val))},
-        {'x': x_pos, 'y': y_pos + 0.30, 'xend': x_pos + 1.2, 'yend': y_pos + 0.30, 'label': str(int(mid_val))},
-        {'x': x_pos, 'y': y_pos + 0.15, 'xend': x_pos + 1.2, 'yend': y_pos + 0.15, 'label': str(int(min_val))}
+        {'x': x_pos, 'y': y_top_max, 'xend': x_pos + 1.2, 'yend': y_top_max, 'label': str(int(max_val))},
+        {'x': x_pos, 'y': y_top_mid, 'xend': x_pos + 1.2, 'yend': y_top_mid, 'label': str(int(mid_val))},
+        {'x': x_pos, 'y': y_top_min, 'xend': x_pos + 1.2, 'yend': y_top_min, 'label': str(int(min_val))}
     ])
     
-    title_df = pd.DataFrame([{'x': x_pos - 0.2, 'y': y_pos + 0.75, 'label': title}])
+    title_df = pd.DataFrame([{'x': x_pos - 0.2, 'y': y_top_max + 0.35, 'label': title}])
     
-    p_net += geom_point(data=c_df, mapping=aes('x', 'y'), shape=21, color='gray40', fill='#00000000', size=22.0)
-    p_net += geom_point(data=c_df, mapping=aes('x', 'y'), shape=21, color='gray40', fill='#00000000', size=16.0)
-    p_net += geom_point(data=c_df, mapping=aes('x', 'y'), shape=21, color='gray40', fill='#00000000', size=10.0)
+    p_net += geom_point(data=c_max, mapping=aes('x', 'y'), shape=21, color='gray40', fill='#00000000', size=22.0)
+    p_net += geom_point(data=c_mid, mapping=aes('x', 'y'), shape=21, color='gray40', fill='#00000000', size=16.0)
+    p_net += geom_point(data=c_min, mapping=aes('x', 'y'), shape=21, color='gray40', fill='#00000000', size=10.0)
     
     p_net += geom_segment(data=lines_df, mapping=aes('x', 'y', xend='xend', yend='yend'), color='gray50', linetype='dashed', size=0.5)
     p_net += geom_text(data=lines_df, mapping=aes(x='xend', y='yend', label='label'), hjust=0, size=7.5, color='black')
