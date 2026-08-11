@@ -54,6 +54,7 @@ from lets_plot import (
     scale_fill_identity,
     scale_color_gradient,
     scale_size,
+    guides,
     layer_tooltips,
     geom_hline,
     geom_vline
@@ -2324,6 +2325,27 @@ ggenrich_lollipop = visEnrichLollipop
 gglollipop_enrich = visEnrichLollipop
 
 
+def _add_concentric_legend(p_net, x_pos, y_pos, min_val, mid_val, max_val, title='Gene Count'):
+    c_df = pd.DataFrame([{'x': x_pos, 'y': y_pos}])
+    
+    lines_df = pd.DataFrame([
+        {'x': x_pos, 'y': y_pos + 0.45, 'xend': x_pos + 1.2, 'yend': y_pos + 0.45, 'label': str(int(max_val))},
+        {'x': x_pos, 'y': y_pos + 0.30, 'xend': x_pos + 1.2, 'yend': y_pos + 0.30, 'label': str(int(mid_val))},
+        {'x': x_pos, 'y': y_pos + 0.15, 'xend': x_pos + 1.2, 'yend': y_pos + 0.15, 'label': str(int(min_val))}
+    ])
+    
+    title_df = pd.DataFrame([{'x': x_pos - 0.2, 'y': y_pos + 0.75, 'label': title}])
+    
+    p_net += geom_point(data=c_df, mapping=aes('x', 'y'), shape=21, color='gray40', fill='#00000000', size=22.0)
+    p_net += geom_point(data=c_df, mapping=aes('x', 'y'), shape=21, color='gray40', fill='#00000000', size=16.0)
+    p_net += geom_point(data=c_df, mapping=aes('x', 'y'), shape=21, color='gray40', fill='#00000000', size=10.0)
+    
+    p_net += geom_segment(data=lines_df, mapping=aes('x', 'y', xend='xend', yend='yend'), color='gray50', linetype='dashed', size=0.5)
+    p_net += geom_text(data=lines_df, mapping=aes(x='xend', y='yend', label='label'), hjust=0, size=7.5, color='black')
+    p_net += geom_text(data=title_df, mapping=aes('x', 'y', label='label'), hjust=0, size=8.5, fontface='bold')
+    return p_net
+
+
 def visEnrichNetwork(
     data=None,
     top_n=9,
@@ -2332,6 +2354,7 @@ def visEnrichNetwork(
     n_clusters=3,
     show_hulls=True,
     pathway_size_by='Count',
+    nested_legend=True,
     cluster_palette='npg',
     palette='bwr',
     title='Clustered Pathway Enrichment Concept Network (cnetplot)',
@@ -2340,6 +2363,7 @@ def visEnrichNetwork(
     """
     Visualize Pathway-Gene Concept Network (cnetplot / network图) with pathway clustering analysis.
     Pathway circle node sizes scale dynamically based on enriched hit gene count ('Count') or RichFactor / percentage ('RichFactor').
+    Supports nested concentric circles legend (同心圆重叠图例) when nested_legend=True.
     """
     if data is None:
         df_enrich = sim_enrichment_data(n_terms=top_n)
@@ -2508,6 +2532,16 @@ def visEnrichNetwork(
     p_net += geom_text(data=df_nodes, mapping=aes(x='x', y='y', label='label'), size=8, vjust=-1.2, fontface='bold')
     p_net += theme_void()
     p_net += ggtitle(title)
+
+    if nested_legend:
+        p_net += guides(size='none')
+        min_v_int, max_v_int = int(round(min_v)), int(round(max_v))
+        mid_v_int = int(round((min_v + max_v) / 2))
+        max_x = df_nodes['x'].max() + 3.2
+        min_y = df_nodes['y'].min() - 0.5
+        p_net = _add_concentric_legend(p_net, x_pos=max_x, y_pos=min_y,
+                                       min_val=min_v_int, mid_val=mid_v_int, max_val=max_v_int,
+                                       title='Gene Count' if pathway_size_by == 'Count' else pathway_size_by)
 
     return p_net
 
