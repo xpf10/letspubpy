@@ -42,9 +42,16 @@ from lets_plot import (
     scale_fill_gradient2,
     facet_grid,
     theme,
+    theme_bw,
     element_blank,
     element_rect,
-    layer_labels
+    layer_labels,
+    gggrid,
+    ggsize,
+    scale_fill_identity,
+    layer_tooltips,
+    geom_hline,
+    geom_vline
 )
 from lets_plot.plot.core import PlotSpec
 
@@ -1949,6 +1956,262 @@ def visPseudotime(
     )
 
 ggpseudotime = visPseudotime
+
+
+# ==============================================================================
+# GSEA Visualization (gseapyvis Migration)
+# ==============================================================================
+
+def sim_gsea_data(n_genes=100, n_hits=12, nes=1.85, pval=0.001, fdr=0.005, term="KEGG_CELL_CYCLE", seed=42):
+    """
+    Simulate synthetic GSEA prerank result dict and rnk dataframe for demonstration.
+    Returns (res_data, term, rnk).
+    """
+    np.random.seed(seed)
+    steps = np.random.randn(n_genes)
+    steps[:n_hits*2] += 0.4
+    res = np.cumsum(steps)
+    res = res - res.min() + 0.05
+    
+    hits = sorted(np.random.choice(int(n_genes * 0.4), size=n_hits, replace=False).tolist())
+    gene_names = [f"Gene_{i+1:03d}" for i in range(n_genes)]
+    matched = ";".join(gene_names[h] for h in hits)
+    
+    res_data = {
+        term: {
+            "RES": res.tolist(),
+            "hits": hits,
+            "nes": nes,
+            "pval": pval,
+            "fdr": fdr,
+            "matched_genes": matched
+        }
+    }
+    
+    scores = np.sort(np.random.randn(n_genes))[::-1]
+    rnk = pd.DataFrame({"gene": gene_names, "score": scores})
+    
+    return res_data, term, rnk
+
+
+def _hex_to_rgb(hex_str):
+    color_map = {
+        'red': '#FF0000', 'blue': '#0000FF', 'white': '#FFFFFF',
+        'green': '#00FF00', 'black': '#000000', 'yellow': '#FFFF00'
+    }
+    hex_str = color_map.get(str(hex_str).lower(), str(hex_str)).lstrip('#')
+    if len(hex_str) == 3:
+        hex_str = ''.join([c*2 for c in hex_str])
+    return np.array([int(hex_str[i:i+2], 16) for i in (0, 2, 4)], dtype=float)
+
+def _rgb_to_hex(rgb):
+    rgb_clamped = np.clip(rgb, 0, 255)
+    return '#{:02x}{:02x}{:02x}'.format(int(round(rgb_clamped[0])), int(round(rgb_clamped[1])), int(round(rgb_clamped[2])))
+
+def _get_gradient_10(col1='red', col2='blue'):
+    rgb1 = _hex_to_rgb(col1)
+    white = _hex_to_rgb('white')
+    rgb2 = _hex_to_rgb(col2)
+    half1 = [rgb1 + (white - rgb1) * (i / 4.0) for i in range(5)]
+    half2 = [white + (rgb2 - white) * (i / 4.0) for i in range(5)]
+    return [_rgb_to_hex(rgb) for rgb in (half1 + half2)]
+
+
+def compute_heat_blocks(gsdata, htCol=("red", "blue"), htHeight=1.0):
+    """Compute color gradient heatmap blocks for GSEA hit positions."""
+    all_blocks = []
+    for setid in gsdata["Description"].unique():
+        tmp = gsdata[gsdata["Description"] == setid].copy()
+
+        rev_pos = tmp["position"].values[::-1]
+        rev_cumsum = np.cumsum(rev_pos)
+
+        v = np.linspace(1, rev_pos.sum(), 9)
+        inv = np.searchsorted(v, rev_cumsum, side="right")
+
+        if inv.min() == 0:
+            inv += 1
+
+        tmp = tmp.reset_index(drop=True)
+        tmp["inv"] = inv
+
+        tmp["group"] = (tmp["inv"] != tmp["inv"].shift()).cumsum()
+
+        for _, g in tmp.groupby("group"):
+            xmin = g.index.min()
+            xmax = g.index.max() + 1
+            color_idx = g["inv"].iloc[0]
+            all_blocks.append({
+                "xmin": xmin,
+                "xmax": xmax,
+                "ymin": 0,
+                "ymax": htHeight,
+                "col": color_idx,
+                "Description": setid
+            })
+
+    color_list = _get_gradient_10(htCol[0], htCol[1])
+
+    block_df = pd.DataFrame(all_blocks)
+    block_df["col"] = block_df["col"] - 1
+    block_df["col"] = block_df["col"].apply(lambda i: color_list[min(i, len(color_list)-1)])
+
+    return block_df
+
+
+def gsea_plot(res_data=None, term=None, rnk=None):
+    """
+    Create a GSEA enrichment plot from gseapy prerank results.
+    If res_data is None, automatically simulates synthetic GSEA result using sim_gsea_data().
+    """
+    if res_data is None or term is None:
+        res_data, term, rnk = sim_gsea_data()
+
+    if hasattr(res_data, "results"):
+        res_data = res_data.results
+
+    hits = res_data[term]["hits"]
+    resdata = pd.DataFrame({
+        "res": res_data[term]["RES"],
+        "index": range(len(res_data[term]["RES"]))
+    })
+    matched_genes = res_data[term]["matched_genes"].split(";")
+    nes = round(res_data[term]["nes"], 4)
+    pval = round(res_data[term]["pval"], 4)
+    fdr = round(res_data[term]["fdr"], 4)
+
+    hits_data = pd.DataFrame({
+        "hits": hits,
+        "gene": matched_genes
+    })
+    if rnk is not None:
+        hits_data = hits_data.merge(rnk, how="left", on="gene")
+
+    x_position = 0.75 * max(resdata["index"])
+    if nes > 0:
+        y_position = 0.75 * max(resdata["res"])
+    else:
+        y_position = -0.05
+
+    point_tooltips = layer_tooltips().title('@gene')
+    if rnk is not None and "score" in hits_data.columns:
+        point_tooltips = point_tooltips.line('Log2FC|@score')
+
+    p1 = (ggplot(resdata, aes(x='index', y='res')) +
+          geom_line(color="green", show_legend=False, tooltips='none') +
+          geom_hline(yintercept=0, color="grey", size=0.5, linetype="dashed") +
+          geom_point(data=hits_data,
+                     mapping=aes(x='hits', y=[resdata['res'][i] for i in hits_data['hits']]),
+                     color="red", size=1.5,
+                     tooltips=point_tooltips) +
+          geom_text(x=x_position, y=y_position,
+                    label=f"nes:{nes}\npval:{pval}\nfdr:{fdr}",
+                    size=10, hjust=0, vjust=1, fontface="italic", lineheight=1.3) +
+          theme_bw() +
+          theme(axis_text_x=element_blank(),
+                legend_position="none",
+                axis_ticks=element_blank(),
+                panel_grid_major=element_blank()) +
+          _xlab('') + _ylab('Running Enrichment Score ') +
+          ggtitle(term) +
+          scale_x_continuous(expand=(0, 0)) +
+          scale_y_continuous(expand=(0, 0)))
+
+    gsdata = pd.DataFrame({
+        "position": [0] * len(resdata),
+    })
+    gsdata["Description"] = term
+    gsdata.loc[hits, "position"] = 1
+    heatmap_data = compute_heat_blocks(gsdata)
+
+    p2 = (ggplot() +
+          geom_rect(aes(xmin="xmin", xmax="xmax", ymin="ymin", ymax="ymax", fill="col"), data=heatmap_data) +
+          geom_vline(aes(xintercept="hits"), color='black', data=hits_data) +
+          scale_fill_identity() +
+          scale_y_continuous(expand=(0, 0)) +
+          scale_x_continuous(expand=(0, 0)) +
+          theme(legend_position="none",
+                axis_text=element_blank(),
+                axis_ticks=element_blank(),
+                axis_title=element_blank(),
+                panel_background=element_blank()) +
+          _xlab("Rank in Ordered Dataset"))
+
+    combined = gggrid([p1, p2], ncol=1, align=True, heights=[0.7, 0.1], vspace=-20) + ggsize(700, 500)
+    return combined
+
+visGSEA = gsea_plot
+gggsea = gsea_plot
+gggsea_plot = gsea_plot
+
+
+def blitzgsea_plot(signature, geneset, library, result=None, center=True):
+    """Create a GSEA enrichment plot from blitzgsea results using lets-plot."""
+    try:
+        import blitzgsea as blitz
+    except ImportError:
+        raise ImportError(
+            "blitzgsea is required to use blitzgsea_plot. "
+            "Please install it with `pip install blitzgsea`."
+        )
+
+    if geneset not in library:
+        raise KeyError(f"Gene set '{geneset}' not found in library.")
+
+    sig = signature.copy()
+    sig.columns = ["gene", "score"]
+    sig = sig.sort_values("score", ascending=False).set_index("gene")
+    sig = sig[~sig.index.duplicated(keep="first")]
+
+    if center:
+        sig["score"] = sig["score"] - sig["score"].mean()
+
+    signature_map = {gene: idx for idx, gene in enumerate(sig.index)}
+    gs = set(library[geneset]) & set(sig.index)
+
+    if not gs:
+        raise ValueError(f"No genes in gene set '{geneset}' overlap with the signature.")
+
+    running_sum, es = blitz.enrichment_score(
+        np.array(np.abs(sig["score"])),
+        signature_map,
+        gs
+    )
+    running_sum = list(running_sum)
+
+    hits = [i for i, gene in enumerate(sig.index) if gene in gs]
+    matched_genes = ";".join([sig.index[i] for i in hits])
+
+    nes = 0.0
+    pval = 0.0
+    fdr = 0.0
+    if result is not None:
+        if geneset in result.index:
+            stats = result.loc[geneset]
+            nes = stats.get("nes", 0.0)
+            pval = stats.get("pval", 0.0)
+            fdr = stats.get("fdr", 0.0)
+
+    res_data = {
+        geneset: {
+            "RES": running_sum,
+            "hits": hits,
+            "matched_genes": matched_genes,
+            "nes": nes,
+            "pval": pval,
+            "fdr": fdr
+        }
+    }
+
+    rnk = pd.DataFrame({
+        "gene": sig.index.values,
+        "score": sig["score"].values
+    })
+
+    return gsea_plot(res_data, geneset, rnk=rnk)
+
+visBlitzGSEA = blitzgsea_plot
+ggblitzgsea = blitzgsea_plot
 
 
 
