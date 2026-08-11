@@ -1565,6 +1565,14 @@ def visCluster(data,
         Custom theme.
     """
     df_raw = data.select_dtypes(include=[np.number]).copy()
+    if df_raw.shape[1] > 150:
+        n_bins = 100
+        cell_cols = df_raw.columns
+        chunks = np.array_split(cell_cols, n_bins)
+        binned_data = {}
+        for idx, chunk in enumerate(chunks):
+            binned_data[f'Pt_{idx+1:03d}'] = df_raw[chunk].mean(axis=1)
+        df_raw = pd.DataFrame(binned_data)
 
     # Standardize / Scale
     if scale == "row":
@@ -1853,7 +1861,8 @@ def sim_pseudotime_data(n_genes=80, n_pts=50, n_clusters=4, seed=42):
     
     data = []
     gene_names = []
-    sigma = 220.0 / (n_clusters ** 0.7)
+    filter_sigma = max(2.0, n_pts / 25.0)
+    sigma_width = 220.0 / (n_clusters ** 0.7)
     
     for c_idx in range(1, n_clusters + 1):
         center = (c_idx - 1) / max(1, n_clusters - 1) * 100.0
@@ -1870,15 +1879,18 @@ def sim_pseudotime_data(n_genes=80, n_pts=50, n_clusters=4, seed=42):
                 prefix = 'Late'
             else:
                 # Mid transition pulse peak
-                pattern = np.exp(-((t - jitter_center)**2) / sigma)
+                pattern = np.exp(-((t - jitter_center)**2) / sigma_width)
                 prefix = f'Mid{c_idx-1}'
                 
             noise = np.random.normal(0, 0.05, n_pts)
-            smooth_curve = _gaussian_filter1d(pattern + noise, sigma=2.0)
+            smooth_curve = _gaussian_filter1d(pattern + noise, sigma=filter_sigma)
             data.append(smooth_curve)
-            gene_names.append(f'{prefix}_Gene_{i+1:02d}')
+            gene_names.append(f'{prefix}_Gene_{i+1:04d}')
 
-    col_names = [f'Pt_{int(pt)}' for pt in t]
+    if n_pts > 200:
+        col_names = [f'Cell_{i+1:04d}' for i in range(n_pts)]
+    else:
+        col_names = [f'Pt_{int(pt)}' for pt in t]
     df = pd.DataFrame(data, index=gene_names, columns=col_names)
     return df
 
