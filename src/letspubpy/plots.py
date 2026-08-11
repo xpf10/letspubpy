@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 from scipy import stats as _scipy_stats
-from scipy.spatial.distance import pdist as _pdist
+from scipy.spatial import ConvexHull as _ConvexHull
+from scipy.spatial.distance import pdist as _pdist, squareform as _squareform
 from scipy.cluster.hierarchy import linkage as _linkage, dendrogram as _dendrogram, fcluster as _fcluster
 from scipy.ndimage import gaussian_filter1d as _gaussian_filter1d
 from lets_plot import (
@@ -2222,7 +2223,7 @@ ggblitzgsea = blitzgsea_plot
 # GSEA / ORA Enrichment Lollipop & Concept Network Visualization
 # ==============================================================================
 
-def sim_enrichment_data(n_terms=10, seed=42):
+def sim_enrichment_data(n_terms=9, seed=42):
     """
     Simulate synthetic pathway enrichment dataset (GO/KEGG/Reactome) for lollipop & network charts.
     Returns DataFrame with columns: Term, Count, p.adjust, RichFactor, Genes, Log2FC.
@@ -2230,22 +2231,30 @@ def sim_enrichment_data(n_terms=10, seed=42):
     np.random.seed(seed)
     pathways = [
         'Cell Cycle (KEGG)', 'p53 Signaling Pathway', 'DNA Replication',
-        'Apoptosis Pathway', 'MAPK Signaling Pathway', 'PI3K-Akt Signaling',
-        'NF-kappa B Signaling', 'Toll-like Receptor', 'FoxO Signaling Pathway',
-        'JAK-STAT Signaling', 'Autophagy - animal', 'Mitophagy - animal'
+        'Apoptosis Pathway', 'Necroptosis Pathway', 'Autophagy - animal',
+        'MAPK Signaling Pathway', 'PI3K-Akt Signaling', 'Ras Signaling Pathway',
+        'NF-kappa B Signaling', 'Toll-like Receptor', 'FoxO Signaling Pathway'
     ]
     terms = pathways[:min(n_terms, len(pathways))]
     
-    counts = np.random.randint(8, 45, size=len(terms))
-    pvals = 10 ** (-np.random.uniform(1.5, 6.0, size=len(terms)))
+    counts = np.random.randint(12, 45, size=len(terms))
+    pvals = 10 ** (-np.random.uniform(1.8, 6.5, size=len(terms)))
     rich_factors = counts / np.random.randint(60, 150, size=len(terms))
     
+    gene_pools = {
+        0: [f'Cycle_G{j:02d}' for j in range(1, 10)],
+        1: [f'Death_G{j:02d}' for j in range(1, 10)],
+        2: [f'Signal_G{j:02d}' for j in range(1, 10)],
+        3: [f'Immune_G{j:02d}' for j in range(1, 10)]
+    }
+
     genes_list = []
-    gene_counter = 1
-    for count in counts:
-        hit_genes = [f"Gene_{gene_counter + j:02d}" for j in range(min(5, count // 3))]
-        gene_counter += min(5, count // 3)
-        genes_list.append(";".join(hit_genes))
+    for i, term in enumerate(terms):
+        c_idx = (i // 3) % len(gene_pools)
+        main_genes = list(np.random.choice(gene_pools[c_idx], size=4, replace=False))
+        cross_pool = gene_pools[(c_idx + 1) % len(gene_pools)]
+        main_genes.append(np.random.choice(cross_pool))
+        genes_list.append(";".join(main_genes))
 
     df = pd.DataFrame({
         'Term': terms,
@@ -2317,100 +2326,168 @@ gglollipop_enrich = visEnrichLollipop
 
 def visEnrichNetwork(
     data=None,
-    top_n=5,
+    top_n=9,
     genes_per_term=4,
+    cluster_pathways=True,
+    n_clusters=3,
+    show_hulls=True,
+    cluster_palette='npg',
     palette='bwr',
-    title='Enrichment Pathway-Gene Concept Network (cnetplot)',
+    title='Clustered Pathway Enrichment Concept Network (cnetplot)',
     **kwargs
 ):
     """
-    Visualize Pathway-Gene Concept Network (cnetplot / network图) connecting enriched pathways with hit genes.
-    If data is None, automatically generates synthetic network data.
+    Visualize Pathway-Gene Concept Network (cnetplot / network图) with pathway clustering analysis.
+    Performs hierarchical clustering on pathway gene-overlap Jaccard distance matrix.
     """
     if data is None:
         df_enrich = sim_enrichment_data(n_terms=top_n)
     else:
         df_enrich = data.head(top_n).copy()
 
-    nodes = []
-    edges = []
     pathways = df_enrich['Term'].tolist()[:top_n]
     n_terms = len(pathways)
-    t_angles = np.linspace(0, 2*np.pi, n_terms, endpoint=False)
-    r_pathway = 4.0
-    
-    pathway_coords = {}
     np.random.seed(42)
 
+    # Build gene hits mapping for each pathway
+    term_genes = {}
+    for p_name in pathways:
+        p_row = df_enrich[df_enrich['Term'] == p_name].iloc[0] if 'Term' in df_enrich.columns else None
+        if p_row is not None and 'Genes' in p_row and pd.notna(p_row['Genes']):
+            genes = set(str(p_row['Genes']).split(';'))
+        else:
+            genes = set([f'{p_name[:3]}_Gene_{j+1:02d}' for j in range(genes_per_term)])
+        term_genes[p_name] = genes
+
+    # Clustering analysis if enabled
+    if cluster_pathways and n_terms >= 3:
+        n_clusters = min(n_clusters, n_terms // 2 if n_terms >= 4 else 2)
+        dist_mat = np.zeros((n_terms, n_terms))
+        for i in range(n_terms):
+            for j in range(n_terms):
+                if i != j:
+                    g1, g2 = term_genes[pathways[i]], term_genes[pathways[j]]
+                    jaccard = len(g1 & g2) / max(1, len(g1 | g2))
+                    dist_mat[i, j] = 1.0 - jaccard
+
+        Z = _linkage(_squareform(dist_mat), method='ward')
+        cluster_labels = _fcluster(Z, t=n_clusters, criterion='maxclust')
+    else:
+        n_clusters = 1
+        cluster_labels = np.ones(n_terms, dtype=int)
+
+    # Layout coordinates
+    cluster_centers = {}
+    c_angles = np.linspace(0, 2*np.pi, n_clusters, endpoint=False)
+    r_cluster = 6.0 if n_clusters > 1 else 0.0
+
+    for c_id in range(1, n_clusters + 1):
+        cluster_centers[c_id] = (r_cluster * np.cos(c_angles[c_id - 1]), r_cluster * np.sin(c_angles[c_id - 1]))
+
+    nodes = []
+    edges = []
+
+    # Map pathways per cluster for angular distribution
+    cluster_term_counts = {}
+    cluster_term_idx = {}
+    for c_id in range(1, n_clusters + 1):
+        c_terms = [pathways[k] for k in range(n_terms) if cluster_labels[k] == c_id]
+        cluster_term_counts[c_id] = len(c_terms)
+        cluster_term_idx[c_id] = 0
+
     for i, p_name in enumerate(pathways):
-        x = r_pathway * np.cos(t_angles[i])
-        y = r_pathway * np.sin(t_angles[i])
-        pathway_coords[p_name] = (x, y)
+        c_id = cluster_labels[i]
+        cx, cy = cluster_centers[c_id]
+        c_total = cluster_term_counts[c_id]
+        idx_in_c = cluster_term_idx[c_id]
+        cluster_term_idx[c_id] += 1
+
+        if c_total > 1:
+            sub_angle = idx_in_c * (2 * np.pi / c_total) + 0.2
+            px = cx + 2.5 * np.cos(sub_angle)
+            py = cy + 2.5 * np.sin(sub_angle)
+        else:
+            px, py = cx, cy
 
         p_row = df_enrich[df_enrich['Term'] == p_name].iloc[0] if 'Term' in df_enrich.columns else None
         p_val = float(p_row['neg_log10_p']) if p_row is not None and 'neg_log10_p' in p_row else np.random.uniform(2.0, 5.0)
 
         nodes.append({
             'name': p_name,
-            'x': x,
-            'y': y,
+            'x': px,
+            'y': py,
             'node_type': 'Pathway',
-            'size': 14.0,
+            'Cluster': f'Cluster {c_id}',
+            'size': 13.0,
             'color_val': p_val,
             'label': p_name
         })
 
-        # Gene nodes
-        if p_row is not None and 'Genes' in p_row and pd.notna(p_row['Genes']):
-            genes = str(p_row['Genes']).split(';')
-        else:
-            genes = [f'{p_name[:3]}_Gene_{j+1}' for j in range(genes_per_term)]
+        g_list = list(term_genes[p_name])
+        g_count = len(g_list)
+        g_angles = np.linspace(0, 2*np.pi, g_count, endpoint=False)
+        r_gene = 2.4
 
-        g_count = len(genes)
-        g_angles = t_angles[i] + np.linspace(-0.5, 0.5, g_count)
-        r_gene = 7.5 + np.random.uniform(-0.4, 0.4, size=g_count)
-
-        for j, g_name in enumerate(genes):
-            gx = r_gene[j] * np.cos(g_angles[j])
-            gy = r_gene[j] * np.sin(g_angles[j])
+        for j, g_name in enumerate(g_list):
+            gx = px + r_gene * np.cos(g_angles[j])
+            gy = py + r_gene * np.sin(g_angles[j])
 
             nodes.append({
                 'name': g_name,
                 'x': gx,
                 'y': gy,
                 'node_type': 'Gene',
+                'Cluster': f'Cluster {c_id}',
                 'size': 6.0,
                 'color_val': np.random.uniform(-2.0, 2.0),
                 'label': g_name
             })
 
-            edges.append({
-                'x': x,
-                'y': y,
-                'xend': gx,
-                'yend': gy,
-                'pathway': p_name
-            })
+            edges.append({'x': px, 'y': py, 'xend': gx, 'yend': gy})
 
     df_nodes = pd.DataFrame(nodes)
     df_edges = pd.DataFrame(edges)
 
-    p_net = (
-        _ggplot() +
-        geom_segment(data=df_edges, mapping=aes(x='x', y='y', xend='xend', yend='yend'),
-                     color='gray80', size=0.8) +
-        geom_point(data=df_nodes[df_nodes['node_type'] == 'Gene'],
-                   mapping=aes(x='x', y='y', fill='color_val'),
-                   shape=21, size=7, color='white') +
-        geom_point(data=df_nodes[df_nodes['node_type'] == 'Pathway'],
-                   mapping=aes(x='x', y='y', fill='color_val'),
-                   shape=21, size=14, color='black') +
-        geom_text(data=df_nodes, mapping=aes(x='x', y='y', label='label'),
-                  size=9, vjust=-1.2, fontface='bold') +
-        scale_fill_gradient2(low='#2166AC', mid='#F7F7F7', high='#B2182B', midpoint=0, name='Log2FC / -log10(p)') +
-        theme_void() +
-        ggtitle(title)
-    )
+    p_net = _ggplot()
+
+    # Convex hull polygons for cluster background
+    if show_hulls and n_clusters > 1:
+        hull_rows = []
+        for c_id_str, group in df_nodes.groupby('Cluster'):
+            points = group[['x', 'y']].values
+            if len(points) >= 3:
+                try:
+                    hull = _ConvexHull(points)
+                    hull_points = points[hull.vertices]
+                    center = hull_points.mean(axis=0)
+                    poly = center + (hull_points - center) * 1.3
+                    for pt in poly:
+                        hull_rows.append({'x': pt[0], 'y': pt[1], 'Cluster': c_id_str})
+                except Exception:
+                    pass
+        if hull_rows:
+            df_hulls = pd.DataFrame(hull_rows)
+            p_net += geom_polygon(data=df_hulls, mapping=aes(x='x', y='y', fill='Cluster'), alpha=0.15)
+            p_net += scale_fill_pubr(cluster_palette)
+
+    p_net += geom_segment(data=df_edges, mapping=aes(x='x', y='y', xend='xend', yend='yend'), color='gray85', size=0.6)
+
+    if cluster_pathways and n_clusters > 1:
+        p_net += geom_point(data=df_nodes[df_nodes['node_type'] == 'Gene'],
+                            mapping=aes(x='x', y='y', color='Cluster'), size=5, shape=19)
+        p_net += geom_point(data=df_nodes[df_nodes['node_type'] == 'Pathway'],
+                            mapping=aes(x='x', y='y', fill='Cluster'), size=13, shape=21, color='black')
+        p_net += scale_color_pubr(cluster_palette)
+    else:
+        p_net += geom_point(data=df_nodes[df_nodes['node_type'] == 'Gene'],
+                            mapping=aes(x='x', y='y', fill='color_val'), shape=21, size=6, color='white')
+        p_net += geom_point(data=df_nodes[df_nodes['node_type'] == 'Pathway'],
+                            mapping=aes(x='x', y='y', fill='color_val'), shape=21, size=13, color='black')
+        p_net += scale_fill_gradient2(low='#2166AC', mid='#F7F7F7', high='#B2182B', midpoint=0, name='Log2FC / -log10(p)')
+
+    p_net += geom_text(data=df_nodes, mapping=aes(x='x', y='y', label='label'), size=8, vjust=-1.2, fontface='bold')
+    p_net += theme_void()
+    p_net += ggtitle(title)
 
     return p_net
 
