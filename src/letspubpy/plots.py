@@ -23,6 +23,7 @@ from lets_plot import (
     geom_blank,
     geom_tile,
     geom_rect,
+    geom_segment,
     geom_ribbon,
     geom_qq,
     geom_qq2,
@@ -43,12 +44,15 @@ from lets_plot import (
     facet_grid,
     theme,
     theme_bw,
+    theme_void,
     element_blank,
     element_rect,
     layer_labels,
     gggrid,
     ggsize,
     scale_fill_identity,
+    scale_color_gradient,
+    scale_size,
     layer_tooltips,
     geom_hline,
     geom_vline
@@ -2212,6 +2216,208 @@ def blitzgsea_plot(signature, geneset, library, result=None, center=True):
 
 visBlitzGSEA = blitzgsea_plot
 ggblitzgsea = blitzgsea_plot
+
+
+# ==============================================================================
+# GSEA / ORA Enrichment Lollipop & Concept Network Visualization
+# ==============================================================================
+
+def sim_enrichment_data(n_terms=10, seed=42):
+    """
+    Simulate synthetic pathway enrichment dataset (GO/KEGG/Reactome) for lollipop & network charts.
+    Returns DataFrame with columns: Term, Count, p.adjust, RichFactor, Genes, Log2FC.
+    """
+    np.random.seed(seed)
+    pathways = [
+        'Cell Cycle (KEGG)', 'p53 Signaling Pathway', 'DNA Replication',
+        'Apoptosis Pathway', 'MAPK Signaling Pathway', 'PI3K-Akt Signaling',
+        'NF-kappa B Signaling', 'Toll-like Receptor', 'FoxO Signaling Pathway',
+        'JAK-STAT Signaling', 'Autophagy - animal', 'Mitophagy - animal'
+    ]
+    terms = pathways[:min(n_terms, len(pathways))]
+    
+    counts = np.random.randint(8, 45, size=len(terms))
+    pvals = 10 ** (-np.random.uniform(1.5, 6.0, size=len(terms)))
+    rich_factors = counts / np.random.randint(60, 150, size=len(terms))
+    
+    genes_list = []
+    gene_counter = 1
+    for count in counts:
+        hit_genes = [f"Gene_{gene_counter + j:02d}" for j in range(min(5, count // 3))]
+        gene_counter += min(5, count // 3)
+        genes_list.append(";".join(hit_genes))
+
+    df = pd.DataFrame({
+        'Term': terms,
+        'Count': counts,
+        'p.adjust': pvals,
+        'neg_log10_p': -np.log10(pvals),
+        'RichFactor': rich_factors,
+        'Genes': genes_list,
+        'x_zero': 0.0
+    }).sort_values(by='RichFactor', ascending=True).reset_index(drop=True)
+    
+    df['Term'] = pd.Categorical(df['Term'], categories=df['Term'].tolist(), ordered=True)
+    return df
+
+
+def visEnrichLollipop(
+    data=None,
+    top_n=10,
+    x='RichFactor',
+    color_by='p.adjust',
+    size_by='Count',
+    palette='pubr',
+    title='Enrichment Analysis Lollipop Chart',
+    xlab=None,
+    ylab='Pathway Terms',
+    **kwargs
+):
+    """
+    Visualize GSEA / ORA enrichment results using a Lollipop chart (棒棒糖图).
+    If data is None, automatically generates synthetic enrichment data using sim_enrichment_data().
+    """
+    if data is None:
+        df = sim_enrichment_data(n_terms=top_n)
+    else:
+        df = data.copy()
+        if 'x_zero' not in df.columns:
+            df['x_zero'] = 0.0
+        if color_by == 'p.adjust' and 'neg_log10_p' not in df.columns and 'p.adjust' in df.columns:
+            df['neg_log10_p'] = -np.log10(df['p.adjust'].replace(0, 1e-10))
+        if top_n and len(df) > top_n:
+            df = df.head(top_n)
+        df = df.sort_values(by=x, ascending=True).reset_index(drop=True)
+        if 'Term' in df.columns:
+            df['Term'] = pd.Categorical(df['Term'], categories=df['Term'].tolist(), ordered=True)
+
+    c_col = 'neg_log10_p' if 'neg_log10_p' in df.columns else color_by
+
+    p = (
+        _ggplot(df) +
+        geom_segment(aes(x='x_zero', xend=x, y='Term', yend='Term'), color='gray70', size=1.2) +
+        geom_point(aes(x=x, y='Term', size=size_by, color=c_col)) +
+        scale_color_gradient(low='#3C5488', high='#E64B35', name='-log10(p.adj)' if c_col == 'neg_log10_p' else c_col) +
+        scale_size(range=[5, 11], name='Gene Count' if size_by == 'Count' else size_by) +
+        theme_pubr() +
+        ggtitle(title)
+    )
+    if xlab:
+        p += _xlab(xlab)
+    else:
+        p += _xlab(x)
+    if ylab:
+        p += _ylab(ylab)
+
+    return p
+
+ggenrich_lollipop = visEnrichLollipop
+gglollipop_enrich = visEnrichLollipop
+
+
+def visEnrichNetwork(
+    data=None,
+    top_n=5,
+    genes_per_term=4,
+    palette='bwr',
+    title='Enrichment Pathway-Gene Concept Network (cnetplot)',
+    **kwargs
+):
+    """
+    Visualize Pathway-Gene Concept Network (cnetplot / network图) connecting enriched pathways with hit genes.
+    If data is None, automatically generates synthetic network data.
+    """
+    if data is None:
+        df_enrich = sim_enrichment_data(n_terms=top_n)
+    else:
+        df_enrich = data.head(top_n).copy()
+
+    nodes = []
+    edges = []
+    pathways = df_enrich['Term'].tolist()[:top_n]
+    n_terms = len(pathways)
+    t_angles = np.linspace(0, 2*np.pi, n_terms, endpoint=False)
+    r_pathway = 4.0
+    
+    pathway_coords = {}
+    np.random.seed(42)
+
+    for i, p_name in enumerate(pathways):
+        x = r_pathway * np.cos(t_angles[i])
+        y = r_pathway * np.sin(t_angles[i])
+        pathway_coords[p_name] = (x, y)
+
+        p_row = df_enrich[df_enrich['Term'] == p_name].iloc[0] if 'Term' in df_enrich.columns else None
+        p_val = float(p_row['neg_log10_p']) if p_row is not None and 'neg_log10_p' in p_row else np.random.uniform(2.0, 5.0)
+
+        nodes.append({
+            'name': p_name,
+            'x': x,
+            'y': y,
+            'node_type': 'Pathway',
+            'size': 14.0,
+            'color_val': p_val,
+            'label': p_name
+        })
+
+        # Gene nodes
+        if p_row is not None and 'Genes' in p_row and pd.notna(p_row['Genes']):
+            genes = str(p_row['Genes']).split(';')
+        else:
+            genes = [f'{p_name[:3]}_Gene_{j+1}' for j in range(genes_per_term)]
+
+        g_count = len(genes)
+        g_angles = t_angles[i] + np.linspace(-0.5, 0.5, g_count)
+        r_gene = 7.5 + np.random.uniform(-0.4, 0.4, size=g_count)
+
+        for j, g_name in enumerate(genes):
+            gx = r_gene[j] * np.cos(g_angles[j])
+            gy = r_gene[j] * np.sin(g_angles[j])
+
+            nodes.append({
+                'name': g_name,
+                'x': gx,
+                'y': gy,
+                'node_type': 'Gene',
+                'size': 6.0,
+                'color_val': np.random.uniform(-2.0, 2.0),
+                'label': g_name
+            })
+
+            edges.append({
+                'x': x,
+                'y': y,
+                'xend': gx,
+                'yend': gy,
+                'pathway': p_name
+            })
+
+    df_nodes = pd.DataFrame(nodes)
+    df_edges = pd.DataFrame(edges)
+
+    p_net = (
+        _ggplot() +
+        geom_segment(data=df_edges, mapping=aes(x='x', y='y', xend='xend', yend='yend'),
+                     color='gray80', size=0.8) +
+        geom_point(data=df_nodes[df_nodes['node_type'] == 'Gene'],
+                   mapping=aes(x='x', y='y', fill='color_val'),
+                   shape=21, size=7, color='white') +
+        geom_point(data=df_nodes[df_nodes['node_type'] == 'Pathway'],
+                   mapping=aes(x='x', y='y', fill='color_val'),
+                   shape=21, size=14, color='black') +
+        geom_text(data=df_nodes, mapping=aes(x='x', y='y', label='label'),
+                  size=9, vjust=-1.2, fontface='bold') +
+        scale_fill_gradient2(low='#2166AC', mid='#F7F7F7', high='#B2182B', midpoint=0, name='Log2FC / -log10(p)') +
+        theme_void() +
+        ggtitle(title)
+    )
+
+    return p_net
+
+cnetplot = visEnrichNetwork
+visCnetplot = visEnrichNetwork
+ggenrich_network = visEnrichNetwork
+ggcnetplot = visEnrichNetwork
 
 
 
