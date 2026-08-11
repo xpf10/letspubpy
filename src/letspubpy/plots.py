@@ -22,6 +22,7 @@ from lets_plot import (
     geom_text,
     geom_blank,
     geom_tile,
+    geom_rect,
     geom_ribbon,
     geom_qq,
     geom_qq2,
@@ -42,6 +43,7 @@ from lets_plot import (
     facet_grid,
     theme,
     element_blank,
+    element_rect,
     layer_labels
 )
 from lets_plot.plot.core import PlotSpec
@@ -1771,6 +1773,13 @@ def visCluster(data,
 
         df_trend_left = pd.concat(cluster_overlay_lines)
 
+        trend_box_rows = []
+        for c_id, group in df_sorted.groupby('Cluster'):
+            gene_list = group.index.tolist()
+            first_g, last_g = gene_list[0], gene_list[-1]
+            trend_box_rows.append({'Cluster': c_id, 'xmin': trend_cols[0], 'xmax': trend_cols[-1], 'ymin': first_g, 'ymax': last_g})
+        df_trend_box = pd.DataFrame(trend_box_rows)
+
         p_joined = ggplot()
         is_dense_cols = len(col_names) >= 15
         if is_dense_cols:
@@ -1805,6 +1814,10 @@ def visCluster(data,
             p_joined += geom_point(data=df_trend_left, mapping=aes(x='X_pos', y='Gene', color='Cluster'),
                                     size=4.0)
 
+        # Independent border box around left trend line for each cluster
+        p_joined += geom_rect(data=df_trend_box, mapping=aes(xmin='xmin', xmax='xmax', ymin='ymin', ymax='ymax'),
+                              color='black', fill='#00000000', size=0.8)
+
         if palette in ("bwr", "rdbu"):
             p_joined += scale_fill_gradient2(low="#2166AC", mid="#F7F7F7", high="#B2182B", midpoint=0)
         elif palette in ("npg", "coolwarm"):
@@ -1820,7 +1833,13 @@ def visCluster(data,
         p_joined += facet_grid(y='Cluster', scales='free_y')
 
         theme_j = ggtheme if ggtheme is not None else theme_pubr()
-        theme_j += theme(strip_text=element_blank(), strip_background=element_blank())
+        theme_j += theme(
+            strip_text=element_blank(),
+            strip_background=element_blank(),
+            panel_background=element_rect(color='black', fill='#00000000', size=0.8),
+            axis_text_x=element_blank(),
+            axis_ticks_x=element_blank()
+        )
         if len(df_sorted) > 50:
             theme_j += theme(axis_text_y=element_blank(), axis_ticks_y=element_blank())
         if not show_legend:
