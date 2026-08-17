@@ -39,10 +39,10 @@ You can download the pre-built wheel (`.whl`) or source distribution from the [G
 
 ```bash
 # Install from the downloaded wheel
-pip install letspubpy-0.1.0-py3-none-any.whl
+pip install letspubpy-0.2.0-py3-none-any.whl
 
 # Or install directly via the release download URL
-pip install https://github.com/xpf10/letspubpy/releases/download/v0.1.0/letspubpy-0.1.0-py3-none-any.whl
+pip install https://github.com/xpf10/letspubpy/releases/download/v0.2.0/letspubpy-0.2.0-py3-none-any.whl
 ```
 
 ---

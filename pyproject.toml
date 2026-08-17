@@ -1,6 +1,6 @@
 [project]
 name = "letspubpy"
-version = "0.1.0"
+version = "0.2.0"
 description = "A publication-ready plotting library wrapping Lets-Plot in Python, mimicking R's ggpubr."
 readme = "README.md"
 requires-python = ">=3.10"
