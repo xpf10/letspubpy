@@ -146,3 +146,86 @@ p = lpp.rremove(p, 'xlab')
 # Or customize with ggpar
 p = lpp.ggpar(p, title="New Title", palette='nejm', legend='top')
 ```
+
+## Example 8: Publication Clustered Heatmap
+
+```python
+np.random.seed(42)
+genes = [f"Gene_{i+1}" for i in range(12)]
+samples = [f"Sample_{j+1}" for j in range(8)]
+mat = pd.DataFrame(np.random.randn(12, 8), index=genes, columns=samples)
+
+p_heatmap = lpp.ggclustervis(
+    mat,
+    scale="row",
+    cluster_rows=True,
+    cluster_cols=True,
+    palette="bwr",
+    title="Clustered Expression Heatmap",
+    xlab="Samples",
+    ylab="Genes"
+)
+p_heatmap.show()
+```
+
+## Example 9: ClusterGVis Dual-View Expression Dynamics
+
+```python
+# 24 genes x 6 time points
+timepoints = ["0h", "2h", "6h", "12h", "24h", "48h"]
+t = np.linspace(0, 2 * np.pi, 6)
+data = []
+for i in range(24):
+    pattern = np.sin(t) if i < 6 else (np.cos(t) if i < 12 else (np.exp(-t) if i < 18 else 1 - np.exp(-t)))
+    data.append(pattern + np.random.normal(0, 0.2, 6))
+
+df_mat = pd.DataFrame(data, index=[f"Gene_{i+1:02d}" for i in range(24)], columns=timepoints)
+
+p_viscluster = lpp.visCluster(
+    df_mat,
+    n_clusters=4,
+    scale="row",
+    plot_type="both",
+    trend_position="left",
+    palette="bwr",
+    cluster_palette="npg",
+    title="ClusterGVis Expression Dynamics"
+)
+p_viscluster.show()
+```
+
+## Example 10: Single-Cell Pseudotime Trajectory Heatmap
+
+```python
+# Simulate and plot Monocle-style pseudotime trajectory heatmap
+df_pseudo = lpp.sim_pseudotime_data(n_genes=80, n_pts=40, n_clusters=4)
+
+p_pseudo = lpp.visPseudotime(
+    data=df_pseudo,
+    n_clusters=4,
+    scale="row",
+    palette="bwr",
+    cluster_palette="npg",
+    title="Single-Cell Pseudotime Trajectory Heatmap"
+)
+p_pseudo.show()
+```
+
+## Example 11: GSEA and Pathway Enrichment
+
+```python
+# GSEA Running Enrichment Plot
+res_data, term, rnk = lpp.sim_gsea_data(n_genes=120, n_hits=15, nes=1.92, term="KEGG_CELL_CYCLE")
+p_gsea = lpp.visGSEA(res_data, term=term, rnk=rnk)
+p_gsea.show()
+
+# Pathway Enrichment Lollipop
+df_enrich = lpp.sim_enrichment_data(n_terms=10)
+p_lollipop = lpp.visEnrichLollipop(df_enrich, top_n=8, title="Pathway Enrichment Lollipop")
+p_lollipop.show()
+
+# Clustered Concept Network (cnetplot)
+p_network = lpp.visEnrichNetwork(df_enrich, top_n=5, cluster_pathways=True, show_hulls=True)
+p_network.show()
+```
+

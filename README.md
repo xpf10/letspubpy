@@ -9,6 +9,10 @@ A publication-ready plotting library that wraps **Lets-Plot** in Python, mimicki
 ## Key Features
 
 - **High-Level Plots**: Build complex boxplots, violin plots, dotplots, line plots, and pie charts with simple, intuitive functions (`ggboxplot`, `ggviolin`, `ggbarplot`, `ggscatter`, `ggpie`, etc.).
+- **Heatmaps & Clustered Heatmaps**: Create publication-ready heatmaps with row/column hierarchical clustering, Z-score standardization, value annotations, and journal gradients (`ggheatmap`, `ggclustervis`, `ggclustergram`).
+- **Cluster Expression Dynamics (`visCluster`)**: ClusterGVis-style multi-panel visualization combining clustered heatmaps with smoothed cluster trajectory trend lines.
+- **Single-Cell Pseudotime Heatmaps (`visPseudotime`)**: Monocle-style trajectory heatmaps along cell differentiation continuum with built-in simulation tools.
+- **GSEA & Pathway Enrichment**: GSEA running enrichment score curves with hit barcode heatmap ribbons (`visGSEA`, `blitzgsea_plot`), enrichment lollipop charts (`visEnrichLollipop`), and clustered pathway-gene concept networks (`visEnrichNetwork` / `cnetplot`).
 - **Automatic Statistics (`+ stat_compare_means`)**: Easily calculate and annotate plots with statistical test brackets (Welch's t-test, Mann-Whitney U / Wilcoxon, ANOVA, Kruskal-Wallis) using Python's `scipy.stats`.
 - **Journal Color Palettes**: Directly apply color schemes matching top journals like Nature (`npg`), Science (`aaas`), NEJM (`nejm`), JAMA (`jama`), Lancet (`lancet`), and JCO (`jco`).
 - **Flexible Grid Layouts (`ggarrange`)**: Combine multiple plots into a clean subplot panel with a unified legend.
@@ -94,7 +98,52 @@ p_violin.show()
 
 ![Violin Example](images/violin_example.svg)
 
-### 3. Combining Plots into a Layout (`ggarrange`)
+### 3. Clustered Gene Expression Heatmap (`ggclustervis` / `ggheatmap`)
+
+```python
+# Create numeric expression matrix
+genes = [f"Gene_{i+1}" for i in range(12)]
+samples = [f"Ctrl_{j+1}" for j in range(4)] + [f"Treat_{j+1}" for j in range(4)]
+mat = pd.DataFrame(np.random.randn(12, 8), index=genes, columns=samples)
+
+# Hierarchically clustered heatmap with row Z-score scaling and publication palette
+p_heat = lpp.ggclustervis(
+    mat,
+    scale="row",
+    cluster_rows=True,
+    cluster_cols=True,
+    palette="bwr",
+    title="Clustered Gene Expression Heatmap",
+    xlab="Samples",
+    ylab="Genes"
+)
+p_heat.show()
+```
+
+### 4. ClusterGVis Dual-View Expression Dynamics (`visCluster`)
+
+```python
+# Multi-time-point gene expression dynamics (24 genes x 6 time points)
+timepoints = ["0h", "2h", "6h", "12h", "24h", "48h"]
+t = np.linspace(0, 2 * np.pi, 6)
+data = [np.sin(t) + np.random.normal(0, 0.2, 6) if i < 12 else np.cos(t) + np.random.normal(0, 0.2, 6) for i in range(24)]
+df_mat = pd.DataFrame(data, index=[f"Gene_{i+1:02d}" for i in range(24)], columns=timepoints)
+
+# Dual-view split: left cluster trend lines + right clustered heatmap
+p_cluster = lpp.visCluster(
+    df_mat,
+    n_clusters=4,
+    scale="row",
+    plot_type="both",
+    trend_position="left",
+    palette="bwr",
+    cluster_palette="npg",
+    title="ClusterGVis Expression Dynamics"
+)
+p_cluster.show()
+```
+
+### 5. Combining Plots into a Layout (`ggarrange`)
 
 ```python
 # Create a scatter plot with a linear regression fit
@@ -118,7 +167,7 @@ grid.show()
 
 ![Arranged Grid Example](images/arrange_example.svg)
 
-### 4. Customizing Themes & Fonts
+### 6. Customizing Themes & Fonts
 
 You can use `letspubpy`'s built-in `theme_pubr()` or any of Lets-Plot's standard themes (like `theme_minimal()`, `theme_bw()`, `theme_classic()`, `theme_void()`, etc.) in two ways:
 
@@ -144,7 +193,7 @@ p_bw.show()
 
 ## API Documentation
 
-### Plotting Functions
+### Standard Plotting Functions
 All plotting functions support standard parameters (`color`, `fill`, `palette`, `title`, `xlab`, `ylab`, `show_legend`, `ggtheme`):
 - `ggboxplot(data, x, y, notch=False, add="none", ...)`: Create a boxplot. `add` can be `"jitter"`, `"dotplot"`, or `"point"`.
 - `ggviolin(data, x, y, draw_quantiles=None, add="none", ...)`: Create a violin plot. `add` can be `"boxplot"`, `"jitter"`, or `"dotplot"`.
@@ -155,6 +204,19 @@ All plotting functions support standard parameters (`color`, `fill`, `palette`, 
 - `ggdensity(data, x, y="..density..", ...)`: Create a density curve.
 - `ggpie(data, x, label, fill=None, hole=0, ...)`: Create a pie chart.
 - `ggdonutchart(data, x, label, fill=None, hole=0.4, ...)`: Create a donut chart.
+- `ggqqplot(data, x, ...)`: Create a Q-Q plot with theoretical reference line.
+- `ggecdf(data, x, ...)`: Create an empirical cumulative distribution function (ECDF) plot.
+- `ggcorr(data, method="pearson", digits=2, ...)`: Create a correlation matrix heatmap with significance stars.
+
+### Heatmap & Bioinformatics Visualizations
+- `ggheatmap(data, scale="none", cluster_rows=False, cluster_cols=False, palette="bwr", show_values=False, ...)`: Create a heatmap with optional row/column hierarchical clustering and Z-score scaling.
+- `ggclustervis(data, ...)` / `ggclustergram(data, ...)`: Create a hierarchically clustered heatmap (alias for `ggheatmap` with clustering and row scaling enabled).
+- `visCluster(data, n_clusters=4, plot_type="both", trend_position="left", ...)`: ClusterGVis-style dual view combining clustered heatmaps and cluster expression trend lines.
+- `visPseudotime(data, n_clusters=4, ...)`: Single-cell RNA-seq Monocle-style pseudotime trajectory heatmaps along cell differentiation trajectories.
+- `visGSEA(res_data, term, rnk=None)` / `gsea_plot(...)` / `blitzgsea_plot(...)`: GSEA running enrichment score plot with hit barcode heatmap ribbon and statistical annotations.
+- `visEnrichLollipop(data, top_n=10, x="RichFactor", color_by="p.adjust", size_by="Count", ...)`: Pathway enrichment analysis lollipop chart.
+- `visEnrichNetwork(data, top_n=9, cluster_pathways=True, show_hulls=True, ...)` / `cnetplot(...)`: Clustered pathway-gene concept network with convex hull boundaries and concentric circle legends.
+- `sim_pseudotime_data(...)`, `sim_gsea_data(...)`, `sim_enrichment_data(...)`: Built-in synthetic dataset generators for demonstration and testing.
 
 ### Themes & Color Palettes
 - `theme_pubr(base_size=12, base_family=None, legend="top", border=False)`: Custom clean publication-ready theme.

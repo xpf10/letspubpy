@@ -251,4 +251,51 @@ p = lpp.ggscatter(
 )
 save(p, "pca_clustering", w=700, h=600)
 
+# 13. Clustered Heatmap
+np.random.seed(42)
+genes = [f"Gene_{i+1}" for i in range(12)]
+samples = [f"Ctrl_{j+1}" for j in range(4)] + [f"Treat_{j+1}" for j in range(4)]
+mat_heat = pd.DataFrame(np.random.randn(12, 8), index=genes, columns=samples)
+p = lpp.ggclustervis(
+    mat_heat, scale="row", cluster_rows=True, cluster_cols=True,
+    palette="bwr", title="Clustered Gene Expression Heatmap",
+    xlab="Samples", ylab="Genes"
+)
+save(p, "heatmap_clustered", w=700, h=550)
+
+# 14. ClusterGVis Dual View
+timepoints = ["0h", "2h", "6h", "12h", "24h", "48h"]
+t = np.linspace(0, 2 * np.pi, 6)
+data_trend = [np.sin(t) + np.random.normal(0, 0.2, 6) if i < 12 else np.cos(t) + np.random.normal(0, 0.2, 6) for i in range(24)]
+df_trend = pd.DataFrame(data_trend, index=[f"Gene_{i+1:02d}" for i in range(24)], columns=timepoints)
+p = lpp.visCluster(
+    df_trend, n_clusters=4, scale="row", plot_type="both",
+    trend_position="left", palette="bwr", cluster_palette="npg",
+    title="ClusterGVis Expression Dynamics"
+)
+save(p, "viscluster_basic", w=900, h=600)
+
+# 15. Pseudotime Trajectory Heatmap
+df_pseudo = lpp.sim_pseudotime_data(n_genes=80, n_pts=40, n_clusters=4)
+p = lpp.visPseudotime(
+    data=df_pseudo, n_clusters=4, scale="row",
+    palette="bwr", cluster_palette="npg",
+    title="Single-Cell Pseudotime Trajectory Heatmap"
+)
+save(p, "pseudotime_basic", w=800, h=600)
+
+# 16. GSEA Running Score Plot
+res_data, term, rnk = lpp.sim_gsea_data(n_genes=120, n_hits=15, nes=1.92, term="KEGG_CELL_CYCLE")
+p = lpp.visGSEA(res_data, term=term, rnk=rnk)
+save(p, "gsea_basic", w=700, h=500)
+
+# 17. Enrichment Lollipop Chart
+df_enrich = lpp.sim_enrichment_data(n_terms=10)
+p = lpp.visEnrichLollipop(df_enrich, top_n=8, title="Pathway Enrichment Lollipop Chart")
+save(p, "enrichment_lollipop", w=750, h=500)
+
+# 18. Clustered Concept Network
+p = lpp.visEnrichNetwork(df_enrich, top_n=5, cluster_pathways=True, show_hulls=True, title="Pathway-Gene Concept Network (cnetplot)")
+save(p, "enrichment_network", w=800, h=650)
+
 print("\nAll images generated successfully!")

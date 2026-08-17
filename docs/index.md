@@ -23,6 +23,10 @@
 ### ✨ Key Features
 
 - **High-Level Plots**: Build complex boxplots, violin plots, dotplots, line plots, and pie charts with simple, intuitive functions
+- **Heatmaps & Clustered Heatmaps**: Create publication-ready heatmaps with row/column hierarchical clustering, Z-score standardization, value annotations, and journal gradients (`ggheatmap`, `ggclustervis`)
+- **Cluster Expression Dynamics (`visCluster`)**: ClusterGVis-style multi-panel visualization combining clustered heatmaps with smoothed cluster trajectory trend lines
+- **Single-Cell Pseudotime Heatmaps (`visPseudotime`)**: Monocle-style trajectory heatmaps along cell differentiation continuum with built-in simulation tools
+- **GSEA & Pathway Enrichment**: GSEA running score plots (`visGSEA`), pathway enrichment lollipop charts (`visEnrichLollipop`), and clustered concept networks (`visEnrichNetwork` / `cnetplot`)
 - **Automatic Statistics**: Easily calculate and annotate plots with statistical test brackets (Welch's t-test, Mann-Whitney U / Wilcoxon, ANOVA, Kruskal-Wallis)
 - **Journal Color Palettes**: Directly apply color schemes matching top journals (Nature, Science, NEJM, JAMA, Lancet, JCO)
 - **Flexible Grid Layouts**: Combine multiple plots into a clean subplot panel with a unified legend

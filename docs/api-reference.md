@@ -102,6 +102,62 @@ Complete reference for all public functions in letspubpy.
         show_source: true
 
 
+### ggheatmap
+
+::: letspubpy.plots.ggheatmap
+    options:
+        show_source: true
+
+
+### ggclustergram
+
+::: letspubpy.plots.ggclustergram
+    options:
+        show_source: true
+
+
+### visCluster
+
+::: letspubpy.plots.visCluster
+    options:
+        show_source: true
+
+
+### visPseudotime
+
+::: letspubpy.plots.visPseudotime
+    options:
+        show_source: true
+
+
+### gsea_plot
+
+::: letspubpy.plots.gsea_plot
+    options:
+        show_source: true
+
+
+### blitzgsea_plot
+
+::: letspubpy.plots.blitzgsea_plot
+    options:
+        show_source: true
+
+
+### visEnrichLollipop
+
+::: letspubpy.plots.visEnrichLollipop
+    options:
+        show_source: true
+
+
+### visEnrichNetwork
+
+::: letspubpy.plots.visEnrichNetwork
+    options:
+        show_source: true
+
+
 ## Statistical Functions
 
 ### stat_compare_means
@@ -220,4 +276,33 @@ Complete reference for all public functions in letspubpy.
 ::: letspubpy.plots.compute_correlation
     options:
         show_source: true
+
+
+### sim_pseudotime_data
+
+::: letspubpy.plots.sim_pseudotime_data
+    options:
+        show_source: true
+
+
+### sim_gsea_data
+
+::: letspubpy.plots.sim_gsea_data
+    options:
+        show_source: true
+
+
+### sim_enrichment_data
+
+::: letspubpy.plots.sim_enrichment_data
+    options:
+        show_source: true
+
+
+### compute_heat_blocks
+
+::: letspubpy.plots.compute_heat_blocks
+    options:
+        show_source: true
+
 

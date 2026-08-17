@@ -92,6 +92,10 @@ nav:
       - Q-Q Plot: plots/qqplot.md
       - ECDF: plots/ecdf.md
       - Correlation Heatmap: plots/corrplot.md
+      - Heatmap & Clustering: plots/heatmap.md
+      - Cluster Dual-View (visCluster): plots/viscluster.md
+      - Pseudotime Heatmap: plots/pseudotime.md
+      - GSEA & Pathway Enrichment: plots/enrichment.md
   - Statistical Annotations:
       - stat_compare_means: stats/compare-means.md
       - stat_cor: stats/correlation.md
