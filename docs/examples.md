@@ -229,3 +229,74 @@ p_network = lpp.visEnrichNetwork(df_enrich, top_n=5, cluster_pathways=True, show
 p_network.show()
 ```
 
+## Example 12: Volcano Plot for RNA-seq
+
+```python
+p_volcano = lpp.ggvolcano(
+    fc_cutoff=1.0,
+    p_cutoff=0.05,
+    top_n=10,
+    title="Differential Expression Volcano Plot"
+)
+p_volcano.show()
+```
+
+## Example 13: Multimodal Distribution Raincloud Plot
+
+```python
+p_raincloud = lpp.ggraincloud(
+    palette="npg",
+    title="Multimodal Raincloud Plot"
+)
+p_raincloud.show()
+```
+
+## Example 14: Kaplan-Meier Survival Analysis
+
+```python
+p_surv = lpp.ggsurvplot(
+    time="time",
+    status="status",
+    group="group",
+    palette="npg",
+    conf_int=True,
+    log_rank=True,
+    title="Kaplan-Meier Overall Survival Curve"
+)
+p_surv.show()
+```
+
+## Example 15: Meta-Analysis Forest Plot
+
+```python
+p_forest = lpp.ggforest(
+    title="Meta-Analysis Forest Plot"
+)
+p_forest.show()
+```
+
+## Example 16: Multi-Model ROC Diagnostic Comparison
+
+```python
+p_roc = lpp.ggroc(
+    plot_type="roc",
+    show_auc=True,
+    mark_optimal=True,
+    title="Multi-Model ROC Diagnostic Comparison"
+)
+p_roc.show()
+```
+
+## Example 17: Sigmoidal 4PL Dose-Response IC50 Curve
+
+```python
+p_ic50 = lpp.ggdoseresponse(
+    dose="dose",
+    response="response",
+    show_ic50=True,
+    title="Sigmoidal 4PL Dose-Response IC50 Curve"
+)
+p_ic50.show()
+```
+
+

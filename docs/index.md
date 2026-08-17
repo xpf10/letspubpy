@@ -22,15 +22,16 @@
 
 ### ✨ Key Features
 
-- **High-Level Plots**: Build complex boxplots, violin plots, dotplots, line plots, and pie charts with simple, intuitive functions
-- **Heatmaps & Clustered Heatmaps**: Create publication-ready heatmaps with row/column hierarchical clustering, Z-score standardization, value annotations, and journal gradients (`ggheatmap`, `ggclustervis`)
+- **High-Level Plots**: Build complex boxplots, violin plots, raincloud plots, dotplots, line plots, and pie charts with simple, intuitive functions
+- **Omics & Bioinformatics**: Differential expression volcano plots (`ggvolcano`), GWAS Manhattan plots (`ggmanhattan`), UpSet set intersection charts (`ggupset`), and GSEA/enrichment visualizations (`visGSEA`, `visEnrichLollipop`, `visEnrichNetwork` / `cnetplot`)
+- **Clinical & Statistical Modeling**: Kaplan-Meier survival curves with log-rank tests (`ggsurvplot`), Meta-analysis / Cox regression forest plots (`ggforest`), ROC & PRC diagnostic curves (`ggroc`), RECIST oncology waterfall plots (`ggwaterfall`), Bland-Altman agreement plots (`ggblandaltman`), and multi-metric radar charts (`ggradar`)
+- **Pharmacology & 4PL Fitting**: Non-linear sigmoidal dose-response IC50/EC50 estimation and visualization (`ggdoseresponse` / `ggic50`)
+- **Heatmaps & Clustered Heatmaps**: Publication-ready heatmaps with row/column hierarchical clustering, Z-score standardization, and journal gradients (`ggheatmap`, `ggclustervis`)
 - **Cluster Expression Dynamics (`visCluster`)**: ClusterGVis-style multi-panel visualization combining clustered heatmaps with smoothed cluster trajectory trend lines
 - **Single-Cell Pseudotime Heatmaps (`visPseudotime`)**: Monocle-style trajectory heatmaps along cell differentiation continuum with built-in simulation tools
-- **GSEA & Pathway Enrichment**: GSEA running score plots (`visGSEA`), pathway enrichment lollipop charts (`visEnrichLollipop`), and clustered concept networks (`visEnrichNetwork` / `cnetplot`)
 - **Automatic Statistics**: Easily calculate and annotate plots with statistical test brackets (Welch's t-test, Mann-Whitney U / Wilcoxon, ANOVA, Kruskal-Wallis)
 - **Journal Color Palettes**: Directly apply color schemes matching top journals (Nature, Science, NEJM, JAMA, Lancet, JCO)
 - **Flexible Grid Layouts**: Combine multiple plots into a clean subplot panel with a unified legend
-- **Statistical Annotations**: Add correlation coefficients, regression equations, and more
 - **Fluent Integration**: Seamlessly extends Lets-Plot; you can still use the standard `+` operator
 
 ### 🚀 Quick Example
@@ -72,7 +73,10 @@ p.show()
 |---------|-------------|
 | [Getting Started](getting-started.md) | Installation and first plot |
 | [Examples](examples.md) | Usage examples with code |
-| [Plot Types](plots/boxplot.md) | All supported plot types |
+| [Standard Plots](plots/boxplot.md) | Boxplot, violin, raincloud, bar, scatter, etc. |
+| [Heatmaps & Clusters](plots/heatmap.md) | Clustered heatmaps, visCluster, pseudotime |
+| [Omics & Bioinformatics](plots/volcano.md) | Volcano, Manhattan, UpSet, GSEA, cnetplot |
+| [Clinical & Statistical](plots/survival.md) | Survival KM, Forest, ROC, IC50, Waterfall, Bland-Altman, Radar |
 | [Statistical Annotations](stats/compare-means.md) | Adding p-values, correlations |
 | [Themes & Palettes](themes-and-palettes.md) | Customizing colors and appearance |
 | [Layout & Utilities](layout-and-utilities.md) | Grid arrangements, plot helpers |

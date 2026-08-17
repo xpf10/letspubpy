@@ -158,6 +158,84 @@ Complete reference for all public functions in letspubpy.
         show_source: true
 
 
+### ggvolcano
+
+::: letspubpy.plots.ggvolcano
+    options:
+        show_source: true
+
+
+### ggraincloud
+
+::: letspubpy.plots.ggraincloud
+    options:
+        show_source: true
+
+
+### ggsurvplot
+
+::: letspubpy.plots.ggsurvplot
+    options:
+        show_source: true
+
+
+### ggforest
+
+::: letspubpy.plots.ggforest
+    options:
+        show_source: true
+
+
+### ggroc
+
+::: letspubpy.plots.ggroc
+    options:
+        show_source: true
+
+
+### ggdoseresponse
+
+::: letspubpy.plots.ggdoseresponse
+    options:
+        show_source: true
+
+
+### ggwaterfall
+
+::: letspubpy.plots.ggwaterfall
+    options:
+        show_source: true
+
+
+### ggmanhattan
+
+::: letspubpy.plots.ggmanhattan
+    options:
+        show_source: true
+
+
+### ggblandaltman
+
+::: letspubpy.plots.ggblandaltman
+    options:
+        show_source: true
+
+
+### ggradar
+
+::: letspubpy.plots.ggradar
+    options:
+        show_source: true
+
+
+### ggupset
+
+::: letspubpy.plots.ggupset
+    options:
+        show_source: true
+
+
+
 ## Statistical Functions
 
 ### stat_compare_means
@@ -304,5 +382,83 @@ Complete reference for all public functions in letspubpy.
 ::: letspubpy.plots.compute_heat_blocks
     options:
         show_source: true
+
+
+### sim_volcano_data
+
+::: letspubpy.plots.sim_volcano_data
+    options:
+        show_source: true
+
+
+### sim_raincloud_data
+
+::: letspubpy.plots.sim_raincloud_data
+    options:
+        show_source: true
+
+
+### sim_survival_data
+
+::: letspubpy.plots.sim_survival_data
+    options:
+        show_source: true
+
+
+### sim_forest_data
+
+::: letspubpy.plots.sim_forest_data
+    options:
+        show_source: true
+
+
+### sim_roc_data
+
+::: letspubpy.plots.sim_roc_data
+    options:
+        show_source: true
+
+
+### sim_doseresponse_data
+
+::: letspubpy.plots.sim_doseresponse_data
+    options:
+        show_source: true
+
+
+### sim_waterfall_data
+
+::: letspubpy.plots.sim_waterfall_data
+    options:
+        show_source: true
+
+
+### sim_gwas_data
+
+::: letspubpy.plots.sim_gwas_data
+    options:
+        show_source: true
+
+
+### sim_blandaltman_data
+
+::: letspubpy.plots.sim_blandaltman_data
+    options:
+        show_source: true
+
+
+### sim_radar_data
+
+::: letspubpy.plots.sim_radar_data
+    options:
+        show_source: true
+
+
+### sim_upset_data
+
+::: letspubpy.plots.sim_upset_data
+    options:
+        show_source: true
+
 
 

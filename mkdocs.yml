@@ -80,9 +80,10 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Examples: examples.md
-  - Plot Types:
+  - Standard Plots:
       - Boxplot: plots/boxplot.md
       - Violin: plots/violin.md
+      - Raincloud: plots/raincloud.md
       - Bar Plot: plots/barplot.md
       - Line Plot: plots/lineplot.md
       - Scatter: plots/scatter.md
@@ -92,10 +93,23 @@ nav:
       - Q-Q Plot: plots/qqplot.md
       - ECDF: plots/ecdf.md
       - Correlation Heatmap: plots/corrplot.md
-      - Heatmap & Clustering: plots/heatmap.md
+  - Heatmaps & Clusters:
+      - Heatmap & Clustered Heatmap: plots/heatmap.md
       - Cluster Dual-View (visCluster): plots/viscluster.md
       - Pseudotime Heatmap: plots/pseudotime.md
+  - Omics & Bioinformatics:
+      - Volcano Plot: plots/volcano.md
+      - GWAS Manhattan Plot: plots/manhattan.md
+      - UpSet Intersections: plots/upset.md
       - GSEA & Pathway Enrichment: plots/enrichment.md
+  - Clinical & Statistical Charts:
+      - Kaplan-Meier Survival: plots/survival.md
+      - Forest Plot: plots/forest.md
+      - ROC & PRC Curves: plots/roc.md
+      - Dose-Response & IC50: plots/doseresponse.md
+      - RECIST Waterfall Plot: plots/waterfall.md
+      - Bland-Altman Agreement: plots/blandaltman.md
+      - Radar / Spider Chart: plots/radar.md
   - Statistical Annotations:
       - stat_compare_means: stats/compare-means.md
       - stat_cor: stats/correlation.md

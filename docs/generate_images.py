@@ -298,4 +298,48 @@ save(p, "enrichment_lollipop", w=750, h=500)
 p = lpp.visEnrichNetwork(df_enrich, top_n=5, cluster_pathways=True, show_hulls=True, title="Pathway-Gene Concept Network (cnetplot)")
 save(p, "enrichment_network", w=800, h=650)
 
+# 19. Volcano Plot
+p = lpp.ggvolcano(fc_cutoff=1.0, p_cutoff=0.05, top_n=10, title="RNA-seq Differential Expression Volcano Plot")
+save(p, "volcano_basic", w=750, h=550)
+
+# 20. Raincloud Plot
+p = lpp.ggraincloud(palette="npg", title="Multimodal Distribution Raincloud Plot")
+save(p, "raincloud_basic", w=750, h=500)
+
+# 21. Kaplan-Meier Survival Plot
+p = lpp.ggsurvplot(title="Kaplan-Meier Overall Survival Curve", palette="npg")
+save(p, "survival_basic", w=750, h=550)
+
+# 22. Forest Plot
+p = lpp.ggforest(title="Meta-Analysis Hazard Ratios (95% CI)")
+save(p, "forest_basic", w=800, h=500)
+
+# 23. ROC Curve
+p = lpp.ggroc(title="Multi-Model ROC Diagnostic Comparison", palette="npg")
+save(p, "roc_basic", w=700, h=550)
+
+# 24. Dose-Response IC50
+p = lpp.ggdoseresponse(title="Sigmoidal 4PL Dose-Response IC50 Curve", palette="npg")
+save(p, "doseresponse_basic", w=750, h=500)
+
+# 25. Waterfall Plot
+p = lpp.ggwaterfall(title="Oncology RECIST Tumor Burden Waterfall Plot", palette="npg")
+save(p, "waterfall_basic", w=800, h=500)
+
+# 26. GWAS Manhattan Plot
+p = lpp.ggmanhattan(title="GWAS Genome-Wide Association Manhattan Plot")
+save(p, "manhattan_basic", w=900, h=500)
+
+# 27. Bland-Altman Plot
+p = lpp.ggblandaltman(title="Bland-Altman Clinical Measurement Agreement Plot")
+save(p, "blandaltman_basic", w=750, h=500)
+
+# 28. Radar / Spider Chart
+p = lpp.ggradar(title="Multi-Metric Phenotypic Profile Radar Chart", palette="npg")
+save(p, "radar_basic", w=650, h=600)
+
+# 29. UpSet Plot
+p = lpp.ggupset(title="UpSet Multi-Set Overlap Analysis")
+save(p, "upset_basic", w=800, h=600)
+
 print("\nAll images generated successfully!")

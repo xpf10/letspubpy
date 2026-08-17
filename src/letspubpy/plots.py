@@ -5,6 +5,8 @@ from scipy.spatial import ConvexHull as _ConvexHull
 from scipy.spatial.distance import pdist as _pdist, squareform as _squareform
 from scipy.cluster.hierarchy import linkage as _linkage, dendrogram as _dendrogram, fcluster as _fcluster
 from scipy.ndimage import gaussian_filter1d as _gaussian_filter1d
+from scipy.optimize import curve_fit as _curve_fit
+from scipy.stats import gaussian_kde as _gaussian_kde, chi2 as _chi2
 from lets_plot import (
     ggplot as _ggplot,
     geom_boxplot,
@@ -52,6 +54,9 @@ from lets_plot import (
     gggrid,
     ggsize,
     scale_fill_identity,
+    scale_color_identity,
+    scale_color_manual,
+    scale_fill_manual,
     scale_color_gradient,
     scale_size,
     guides,
@@ -2556,6 +2561,1358 @@ cnetplot = visEnrichNetwork
 visCnetplot = visEnrichNetwork
 ggenrich_network = visEnrichNetwork
 ggcnetplot = visEnrichNetwork
+
+
+# ==============================================================================
+# 1. ggvolcano / visVolcano — Publication-ready Volcano Plot
+# ==============================================================================
+
+def sim_volcano_data(n_genes=2000, n_de=150, seed=42):
+    """Simulate synthetic differential gene expression dataset for volcano plot demonstration.
+
+    Returns DataFrame with columns: ``gene``, ``log2FC``, ``pvalue``, ``padj``.
+    """
+    np.random.seed(seed)
+    genes = [f"Gene_{i+1:04d}" for i in range(n_genes)]
+    log2fc = np.random.normal(0, 0.6, n_genes)
+    pvals = 10 ** (-np.random.exponential(1.2, n_genes))
+    pvals = np.clip(pvals, 1e-50, 1.0)
+
+    de_indices = np.random.choice(n_genes, size=n_de, replace=False)
+    for idx in de_indices[:n_de // 2]:
+        log2fc[idx] = np.random.uniform(1.2, 4.5)
+        pvals[idx] = 10 ** (-np.random.uniform(2.0, 15.0))
+    for idx in de_indices[n_de // 2:]:
+        log2fc[idx] = np.random.uniform(-4.5, -1.2)
+        pvals[idx] = 10 ** (-np.random.uniform(2.0, 15.0))
+
+    df = pd.DataFrame({
+        "gene": genes,
+        "log2FC": log2fc,
+        "pvalue": pvals,
+        "padj": np.clip(pvals * 1.5, 0, 1.0)
+    })
+    return df
+
+
+def ggvolcano(data=None, x="log2FC", y="pvalue", label="gene",
+              fc_cutoff=1.0, p_cutoff=0.05,
+              neg_log10_y=True,
+              top_n=10,
+              palette="npg",
+              colors=None,
+              size=2.0, alpha=0.75,
+              title="Volcano Plot", xlab="log2(Fold Change)", ylab="-log10(p-value)",
+              show_legend=True, ggtheme=None):
+    """Create a publication-ready Volcano plot for differential expression analysis.
+
+    Parameters
+    ----------
+    data : pd.DataFrame, optional
+        Differential expression results table. If None, simulated data is used.
+    x : str
+        Column name for log2 Fold Change.
+    y : str
+        Column name for p-value or adjusted p-value.
+    label : str
+        Column name for gene/molecule labels.
+    fc_cutoff : float
+        Magnitude threshold for log2 Fold Change (default 1.0).
+    p_cutoff : float
+        Significance threshold for p-value (default 0.05).
+    neg_log10_y : bool
+        Whether to convert y to -log10(y) if values are in [0, 1] (default True).
+    top_n : int
+        Number of top significant genes to annotate with labels (default 10).
+    palette : str
+        Color palette name for categories (default ``"npg"``).
+    colors : dict, optional
+        Custom color mapping, e.g. ``{"Up": "#E64B35", "Down": "#3C5488", "NS": "#999999"}``.
+    size : float
+        Scatter point size.
+    alpha : float
+        Scatter point opacity.
+    title, xlab, ylab : str, optional
+        Plot labels.
+    show_legend : bool
+        Whether to display legend.
+    ggtheme : object, optional
+        Custom theme.
+    """
+    if data is None:
+        df = sim_volcano_data()
+    else:
+        df = data.copy()
+
+    if x not in df.columns or y not in df.columns:
+        raise ValueError(f"Columns '{x}' or '{y}' not found in data.")
+
+    if label is None or label not in df.columns:
+        df['label_col'] = df.index.astype(str)
+        label_col = 'label_col'
+    else:
+        label_col = label
+
+    # Convert y to -log10(y) if needed
+    if neg_log10_y and df[y].max() <= 1.0:
+        y_trans = -np.log10(df[y].replace(0, 1e-300))
+        y_cutoff_trans = -np.log10(p_cutoff)
+    else:
+        y_trans = df[y]
+        y_cutoff_trans = p_cutoff
+
+    df['y_plot'] = y_trans
+
+    # Classify points
+    conditions = [
+        (df[x] >= fc_cutoff) & (df['y_plot'] >= y_cutoff_trans),
+        (df[x] <= -fc_cutoff) & (df['y_plot'] >= y_cutoff_trans)
+    ]
+    choices = ['Up', 'Down']
+    df['Regulation'] = np.select(conditions, choices, default='NS')
+
+    # Color mapping
+    color_map = {
+        'Up': '#E64B35',
+        'Down': '#3C5488',
+        'NS': '#999999'
+    }
+    if colors is not None:
+        color_map.update(colors)
+
+    df['color_val'] = df['Regulation'].map(color_map)
+
+    p = ggplot(df, aes(x=x, y='y_plot'))
+    p += geom_point(aes(color='color_val'), size=size, alpha=alpha)
+    p += scale_color_identity()
+
+    # Cutoff dashed lines
+    p += geom_vline(xintercept=fc_cutoff, linetype="dashed", color="gray50", size=0.5)
+    p += geom_vline(xintercept=-fc_cutoff, linetype="dashed", color="gray50", size=0.5)
+    p += geom_hline(yintercept=y_cutoff_trans, linetype="dashed", color="gray50", size=0.5)
+
+    # Top significant gene labels
+    if top_n > 0:
+        sig_df = df[df['Regulation'].isin(['Up', 'Down'])].copy()
+        if len(sig_df) > 0:
+            sig_df['score'] = sig_df['y_plot'] * np.abs(sig_df[x])
+            top_genes = sig_df.sort_values('score', ascending=False).head(top_n)
+            p += geom_text(data=top_genes,
+                           mapping=aes(x=x, y='y_plot', label=label_col),
+                           size=8, vjust=-0.7, color='black')
+
+    theme_obj = ggtheme if ggtheme is not None else theme_pubr()
+    p += theme_obj
+    if title:
+        p += ggtitle(title)
+    if xlab:
+        p += _xlab(xlab)
+    if ylab:
+        p += _ylab(ylab)
+
+    return p
+
+visVolcano = ggvolcano
+
+
+# ==============================================================================
+# 2. ggraincloud / visRaincloud — Modern Raincloud Plot
+# ==============================================================================
+
+def sim_raincloud_data(n_groups=3, n_per_group=60, seed=42):
+    """Simulate continuous multimodal dataset for raincloud plot demonstration."""
+    np.random.seed(seed)
+    groups = [f"Group {chr(65+i)}" for i in range(n_groups)]
+    data = []
+    for i, g in enumerate(groups):
+        mean_val = 10.0 + i * 4.5
+        vals = np.concatenate([
+            np.random.normal(mean_val, 1.8, n_per_group // 2),
+            np.random.normal(mean_val + 2.8, 1.2, n_per_group // 2)
+        ])
+        for v in vals:
+            data.append({"group": g, "value": v})
+    return pd.DataFrame(data)
+
+
+def ggraincloud(data=None, x="group", y="value", fill="group", color="black",
+                palette="npg",
+                cloud_width=0.35, rain_jitter=0.08, box_width=0.12,
+                title="Raincloud Plot", xlab=None, ylab=None,
+                show_legend=True, ggtheme=None):
+    """Create a modern publication-ready Raincloud plot (Half-violin + Jittered points + Boxplot).
+
+    Parameters
+    ----------
+    data : pd.DataFrame, optional
+        Input data. If None, simulated data is used.
+    x : str
+        Categorical grouping column.
+    y : str
+        Continuous numeric column.
+    fill : str
+        Column name or color for cloud fill.
+    color : str
+        Color of point borders and boxplots.
+    palette : str
+        Publication color palette name (default ``"npg"``).
+    cloud_width : float
+        Width of half-violin density curve (default 0.35).
+    rain_jitter : float
+        Jitter width for raw scatter points (default 0.08).
+    box_width : float
+        Width of embedded boxplot (default 0.12).
+    title, xlab, ylab : str, optional
+        Plot labels.
+    show_legend : bool
+        Whether to show legend.
+    ggtheme : object, optional
+        Custom theme.
+    """
+    if data is None:
+        df = sim_raincloud_data()
+    else:
+        df = data.copy()
+
+    groups = df[x].unique().tolist()
+    palette_colors = {
+        'npg': ['#E64B35', '#4DBBD5', '#00A087', '#3C5488', '#F39B7F', '#8491B4'],
+        'nejm': ['#BC3C29', '#0072B5', '#E18727', '#20854E', '#6F99AD', '#FFDC91'],
+        'aaas': ['#3B4992', '#EE0000', '#008B45', '#631879', '#008280', '#BB0021'],
+        'jco': ['#0073C2', '#EFC000', '#868686', '#CD534C', '#7AA6DC', '#003C67']
+    }
+    cols = palette_colors.get(palette, palette_colors['npg'])
+
+    # Build Half-Violin Polygons and Jittered Points
+    poly_dfs = []
+    jitter_rows = []
+    np.random.seed(42)
+
+    for idx, g in enumerate(groups):
+        sub = df[df[x] == g][y].dropna().values
+        if len(sub) < 3:
+            continue
+
+        c_hex = cols[idx % len(cols)]
+        kde = _gaussian_kde(sub)
+        y_grid = np.linspace(sub.min() - 0.5 * sub.std(), sub.max() + 0.5 * sub.std(), 100)
+        dens = kde(y_grid)
+        dens_scaled = (dens / dens.max()) * cloud_width
+
+        x_pos = idx + 1
+        # Half violin on the right side
+        poly_x = np.concatenate([[x_pos], x_pos + dens_scaled, [x_pos]])
+        poly_y = np.concatenate([[y_grid[0]], y_grid, [y_grid[-1]]])
+        poly_df = pd.DataFrame({'x': poly_x, 'y': poly_y, 'group': g, 'col': c_hex})
+        poly_dfs.append(poly_df)
+
+        # Jittered rain points on the left side
+        j_x = x_pos - 0.18 + np.random.uniform(-rain_jitter, rain_jitter, size=len(sub))
+        for jx, vy in zip(j_x, sub):
+            jitter_rows.append({'x': jx, 'y': vy, 'group': g, 'col': c_hex})
+
+    all_polys = pd.concat(poly_dfs, ignore_index=True)
+    df_jitter = pd.DataFrame(jitter_rows)
+
+    p = ggplot()
+    for _, poly in all_polys.groupby('group'):
+        p += geom_polygon(data=poly, mapping=aes(x='x', y='y', fill='col'), alpha=0.6, color='gray30', size=0.5)
+
+    p += geom_point(data=df_jitter, mapping=aes(x='x', y='y', color='col'), size=1.8, alpha=0.7)
+    p += scale_fill_identity()
+    p += scale_color_identity()
+
+    # Mini boxplot in between
+    df['x_num'] = df[x].map(lambda g: groups.index(g) + 1 - 0.04)
+    p += geom_boxplot(data=df, mapping=aes(x='x_num', y=y), width=box_width, color='black', fill='white', alpha=0.85)
+
+    p += scale_x_continuous(breaks=list(range(1, len(groups) + 1)), labels=groups, expand=[0.1, 0.1])
+
+    theme_obj = ggtheme if ggtheme is not None else theme_pubr()
+    p += theme_obj
+    if title:
+        p += ggtitle(title)
+    if xlab:
+        p += _xlab(xlab)
+    else:
+        p += _xlab(x)
+    if ylab:
+        p += _ylab(ylab)
+    else:
+        p += _ylab(y)
+
+    return p
+
+visRaincloud = ggraincloud
+
+
+# ==============================================================================
+# 3. ggsurvplot / visSurvival — Kaplan-Meier Survival Plot
+# ==============================================================================
+
+def sim_survival_data(n_samples=150, seed=42):
+    """Simulate clinical survival dataset with time, event status, and treatment groups."""
+    np.random.seed(seed)
+    groups = np.random.choice(["Treatment", "Control"], size=n_samples, p=[0.5, 0.5])
+    times = []
+    status = []
+    for g in groups:
+        lam = 0.035 if g == "Treatment" else 0.065
+        t = np.random.exponential(1.0 / lam)
+        censor_time = np.random.uniform(12, 60)
+        if t < censor_time:
+            times.append(min(60.0, round(t, 1)))
+            status.append(1)  # event occurred
+        else:
+            times.append(min(60.0, round(censor_time, 1)))
+            status.append(0)  # censored
+    return pd.DataFrame({"time": times, "status": status, "group": groups})
+
+
+def ggsurvplot(data=None, time="time", status="status", group="group",
+               palette="npg", conf_int=True, censored_ticks=True,
+               log_rank=True, median_line=True,
+               title="Kaplan-Meier Survival Analysis",
+               xlab="Time (Months)", ylab="Survival Probability",
+               show_legend=True, ggtheme=None):
+    """Create a publication-ready Kaplan-Meier survival curve with optional log-rank test and confidence intervals.
+
+    Parameters
+    ----------
+    data : pd.DataFrame, optional
+        Clinical survival dataset. If None, simulated data is used.
+    time : str
+        Column name for survival time.
+    status : str
+        Column name for event status (1 = event, 0 = censored).
+    group : str, optional
+        Column name for grouping / stratification.
+    palette : str
+        Color palette name (default ``"npg"``).
+    conf_int : bool
+        Whether to display 95% Greenwood confidence interval ribbons (default True).
+    censored_ticks : bool
+        Whether to plot tick markers for censored events (default True).
+    log_rank : bool
+        Whether to compute and annotate Log-rank test p-value (default True).
+    median_line : bool
+        Whether to plot median survival drop-lines (default True).
+    title, xlab, ylab : str, optional
+        Plot labels.
+    show_legend : bool
+        Whether to show legend.
+    ggtheme : object, optional
+        Custom theme.
+    """
+    if data is None:
+        df = sim_survival_data()
+    else:
+        df = data.copy()
+
+    if group is None or group not in df.columns:
+        df['group_col'] = 'All'
+        group_col = 'group_col'
+    else:
+        group_col = group
+
+    strata = df[group_col].unique().tolist()
+    curve_rows = []
+    censored_rows = []
+
+    for s in strata:
+        sub = df[df[group_col] == s].sort_values(by=time).reset_index(drop=True)
+        unique_times = sorted(sub[time].unique())
+
+        n_at_risk = len(sub)
+        surv = 1.0
+        var_sum = 0.0
+
+        # Starting point at t=0
+        curve_rows.append({'time': 0.0, 'surv': 1.0, 'lower': 1.0, 'upper': 1.0, 'group': s})
+
+        for t in unique_times:
+            d = len(sub[(sub[time] == t) & (sub[status] == 1)])
+            c = len(sub[(sub[time] == t) & (sub[status] == 0)])
+
+            # Censored ticks
+            if c > 0 and censored_ticks:
+                censored_rows.append({'time': t, 'surv': surv, 'group': s})
+
+            if d > 0:
+                if n_at_risk > d:
+                    var_sum += d / (n_at_risk * (n_at_risk - d))
+                surv = surv * (1.0 - d / n_at_risk)
+                se = surv * np.sqrt(var_sum)
+                lower = max(0.0, surv - 1.96 * se)
+                upper = min(1.0, surv + 1.96 * se)
+
+                # Step effect
+                prev_surv = curve_rows[-1]['surv']
+                curve_rows.append({'time': t, 'surv': prev_surv, 'lower': lower, 'upper': upper, 'group': s})
+                curve_rows.append({'time': t, 'surv': surv, 'lower': lower, 'upper': upper, 'group': s})
+
+            n_at_risk -= (d + c)
+
+    df_curves = pd.DataFrame(curve_rows)
+    df_cens = pd.DataFrame(censored_rows)
+
+    p = ggplot()
+    if conf_int:
+        p += geom_ribbon(data=df_curves, mapping=aes(x='time', ymin='lower', ymax='upper', fill='group'), alpha=0.18)
+
+    p += geom_line(data=df_curves, mapping=aes(x='time', y='surv', color='group'), size=1.2)
+
+    if len(df_cens) > 0 and censored_ticks:
+        p += geom_point(data=df_cens, mapping=aes(x='time', y='surv', color='group'), shape=3, size=3.0)
+
+    p += scale_color_pubr(palette)
+    p += scale_fill_pubr(palette)
+    p += scale_y_continuous(limits=[0, 1.02], expand=[0, 0])
+
+    # Log-rank test computation
+    if log_rank and len(strata) == 2:
+        s1, s2 = strata[0], strata[1]
+        all_times = sorted(df[time].unique())
+        o1, e1, var_tot = 0.0, 0.0, 0.0
+        n1 = len(df[df[group_col] == s1])
+        n2 = len(df[df[group_col] == s2])
+
+        for t in all_times:
+            d_tot = len(df[(df[time] == t) & (df[status] == 1)])
+            c_tot = len(df[(df[time] == t) & (df[status] == 0)])
+            d1 = len(df[(df[group_col] == s1) & (df[time] == t) & (df[status] == 1)])
+            n_tot = n1 + n2
+
+            if n_tot > 1 and d_tot > 0:
+                e1_t = d_tot * (n1 / n_tot)
+                v_t = (n1 * n2 * d_tot * (n_tot - d_tot)) / (n_tot ** 2 * (n_tot - 1)) if n_tot > 1 else 0
+                o1 += d1
+                e1 += e1_t
+                var_tot += v_t
+
+            n1 -= len(df[(df[group_col] == s1) & (df[time] == t)])
+            n2 -= len(df[(df[group_col] == s2) & (df[time] == t)])
+
+        if var_tot > 0:
+            chi2_stat = ((o1 - e1) ** 2) / var_tot
+            p_val = 1.0 - _chi2.cdf(chi2_stat, df=1)
+            p_str = f"Log-rank p = {p_val:.4f}" if p_val >= 0.0001 else "Log-rank p < 0.0001"
+            max_t = df_curves['time'].max()
+            text_df = pd.DataFrame([{'time': max_t * 0.65, 'surv': 0.85, 'label': p_str}])
+            p += geom_text(data=text_df, mapping=aes(x='time', y='surv', label='label'), size=9, fontface='italic')
+
+    theme_obj = ggtheme if ggtheme is not None else theme_pubr()
+    if not show_legend:
+        theme_obj += theme(legend_position='none')
+    p += theme_obj
+
+    if title:
+        p += ggtitle(title)
+    if xlab:
+        p += _xlab(xlab)
+    if ylab:
+        p += _ylab(ylab)
+
+    return p
+
+visSurvival = ggsurvplot
+
+
+# ==============================================================================
+# 4. ggforest / visForest — Publication-ready Forest Plot
+# ==============================================================================
+
+def sim_forest_data(n_studies=8, seed=42):
+    """Simulate meta-analysis or hazard ratio dataset for forest plot demonstration."""
+    np.random.seed(seed)
+    studies = [f"Study {i+1} ({2016+i})" for i in range(n_studies)]
+    means = np.round(np.random.uniform(0.65, 1.85, size=n_studies), 2)
+    lowers = np.round(means * np.random.uniform(0.65, 0.88, size=n_studies), 2)
+    uppers = np.round(means * np.random.uniform(1.15, 1.45, size=n_studies), 2)
+    pvals = np.round(10 ** (-np.random.uniform(1.2, 4.0, size=n_studies)), 4)
+    weights = np.random.randint(50, 300, size=n_studies)
+    return pd.DataFrame({
+        "study": studies, "mean": means, "lower": lowers, "upper": uppers,
+        "pvalue": pvals, "weight": weights
+    })
+
+
+def ggforest(data=None, study="study", mean="mean", lower="lower", upper="upper",
+             pvalue="pvalue", weight=None, ref_line=1.0,
+             point_color="#3C5488",
+             title="Forest Plot (Meta-Analysis / Hazard Ratios)",
+             xlab="Hazard Ratio (95% CI)", ylab="Studies / Variables",
+             ggtheme=None):
+    """Create a publication-ready Forest Plot with point estimates, 95% CIs, and aligned labels.
+
+    Parameters
+    ----------
+    data : pd.DataFrame, optional
+        Study or variable estimates table. If None, simulated data is used.
+    study : str
+        Column name for study or variable names.
+    mean : str
+        Column name for effect size (e.g. HR, OR, RR, mean difference).
+    lower : str
+        Column name for 95% CI lower bound.
+    upper : str
+        Column name for 95% CI upper bound.
+    pvalue : str, optional
+        Column name for p-values.
+    weight : str, optional
+        Column name for study weights (scales point size).
+    ref_line : float
+        Vertical null-hypothesis reference line (default 1.0 for ratios, 0.0 for differences).
+    point_color : str
+        Color of point markers and error bars.
+    title, xlab, ylab : str, optional
+        Plot labels.
+    ggtheme : object, optional
+        Custom theme.
+    """
+    if data is None:
+        df = sim_forest_data()
+    else:
+        df = data.copy()
+
+    df = df.reset_index(drop=True)
+    df['y_idx'] = len(df) - np.arange(len(df))
+
+    # Format text label for 95% CI
+    df['ci_str'] = df.apply(lambda r: f"{r[mean]:.2f} [{r[lower]:.2f}, {r[upper]:.2f}]", axis=1)
+    if pvalue and pvalue in df.columns:
+        df['p_str'] = df[pvalue].apply(lambda p: f"p = {p:.4f}" if p >= 0.001 else "p < 0.001")
+        df['full_label'] = df['ci_str'] + "  " + df['p_str']
+    else:
+        df['full_label'] = df['ci_str']
+
+    p = ggplot(df, aes(y='y_idx'))
+    p += geom_segment(aes(x=lower, xend=upper, y='y_idx', yend='y_idx'), color=point_color, size=1.0)
+
+    if weight and weight in df.columns:
+        p += geom_point(aes(x=mean, y='y_idx', size=weight), shape=15, color=point_color)
+    else:
+        p += geom_point(aes(x=mean, y='y_idx'), shape=15, size=4.0, color=point_color)
+
+    p += geom_vline(xintercept=ref_line, linetype="dashed", color="gray40", size=0.6)
+
+    # Right side text labels
+    max_x = df[upper].max() * 1.12
+    p += geom_text(aes(x=max_x, y='y_idx', label='full_label'), hjust=0, size=8.0, color='black')
+
+    p += scale_y_continuous(breaks=df['y_idx'].tolist(), labels=df[study].tolist())
+
+    theme_obj = ggtheme if ggtheme is not None else theme_pubr()
+    p += theme_obj
+    if title:
+        p += ggtitle(title)
+    if xlab:
+        p += _xlab(xlab)
+    if ylab:
+        p += _ylab(ylab)
+
+    return p
+
+visForest = ggforest
+
+
+# ==============================================================================
+# 5. ggroc / visROC — ROC & Precision-Recall Curves
+# ==============================================================================
+
+def sim_roc_data(n_samples=300, n_models=2, seed=42):
+    """Simulate ground truth and model predictions for ROC and PR curves."""
+    np.random.seed(seed)
+    y_true = np.random.binomial(1, 0.45, size=n_samples)
+    data = []
+    models = ["Model A (Biomarker)", "Model B (Clinical)"][:n_models]
+    for m in models:
+        noise = np.random.normal(0, 0.35 if "A" in m else 0.55, size=n_samples)
+        scores = 1.0 / (1.0 + np.exp(-(y_true * 2.2 - 1.1 + noise)))
+        for yt, s in zip(y_true, scores):
+            data.append({"y_true": yt, "y_score": s, "model": m})
+    return pd.DataFrame(data)
+
+
+def ggroc(data=None, y_true="y_true", y_score="y_score", group=None,
+          plot_type="roc", palette="npg",
+          show_auc=True, mark_optimal=True,
+          title=None, xlab=None, ylab=None,
+          show_legend=True, ggtheme=None):
+    """Create publication-ready ROC and Precision-Recall Curves with automated AUC computation.
+
+    Parameters
+    ----------
+    data : pd.DataFrame, optional
+        Data containing true binary labels and predicted probabilities. If None, simulated data is used.
+    y_true : str
+        Column name for binary ground truth (0 or 1).
+    y_score : str
+        Column name for continuous predictions / risk scores.
+    group : str, optional
+        Column name for comparing multiple models / markers.
+    plot_type : str
+        ``"roc"`` for Receiver Operating Characteristic, or ``"prc"`` for Precision-Recall.
+    palette : str
+        Color palette name (default ``"npg"``).
+    show_auc : bool
+        Whether to calculate and display Area Under the Curve (default True).
+    mark_optimal : bool
+        Whether to mark optimal threshold point using Youden's J statistic (default True).
+    title, xlab, ylab : str, optional
+        Plot labels.
+    show_legend : bool
+        Whether to show legend.
+    ggtheme : object, optional
+        Custom theme.
+    """
+    if data is None:
+        df = sim_roc_data()
+        group_col = "model" if group is None and "model" in df.columns else group
+    else:
+        df = data.copy()
+        group_col = group
+
+    if group_col is None or group_col not in df.columns:
+        df['model_group'] = 'Model'
+        group_col = 'model_group'
+
+    groups = df[group_col].unique().tolist()
+    curve_rows = []
+    optimal_rows = []
+    auc_texts = []
+
+    for g in groups:
+        sub = df[df[group_col] == g].sort_values(by=y_score, ascending=False).reset_index(drop=True)
+        y_t = sub[y_true].values
+        n_pos = np.sum(y_t == 1)
+        n_neg = np.sum(y_t == 0)
+
+        if n_pos == 0 or n_neg == 0:
+            continue
+
+        tp = np.cumsum(y_t == 1)
+        fp = np.cumsum(y_t == 0)
+        tpr = tp / n_pos
+        fpr = fp / n_neg
+        precision = tp / (tp + fp)
+        recall = tpr
+
+        _calc_auc = getattr(np, 'trapezoid', getattr(np, 'trapz', None))
+        # Add origin point
+        if plot_type == "roc":
+            x_vals = np.concatenate([[0.0], fpr])
+            y_vals = np.concatenate([[0.0], tpr])
+            # Trapezoidal AUC
+            auc = _calc_auc(y_vals, x_vals)
+            auc_texts.append(f"{g} (AUC = {auc:.3f})")
+
+            # Optimal point (Youden's index: max(TPR - FPR))
+            j_scores = tpr - fpr
+            opt_idx = np.argmax(j_scores)
+            optimal_rows.append({'x': fpr[opt_idx], 'y': tpr[opt_idx], 'group': g})
+        else:
+            x_vals = np.concatenate([[0.0], recall])
+            y_vals = np.concatenate([[1.0], precision])
+            auc = _calc_auc(y_vals, x_vals)
+            auc_texts.append(f"{g} (AUC = {auc:.3f})")
+
+        for xv, yv in zip(x_vals, y_vals):
+            curve_rows.append({'x': xv, 'y': yv, 'group': g})
+
+    df_curves = pd.DataFrame(curve_rows)
+    df_opt = pd.DataFrame(optimal_rows)
+
+    p = ggplot(df_curves, aes(x='x', y='y', color='group'))
+    p += geom_line(size=1.2)
+
+    if plot_type == "roc":
+        p += geom_segment(x=0, y=0, xend=1, yend=1, linetype="dashed", color="gray50", size=0.6)
+        if mark_optimal and len(df_opt) > 0:
+            p += geom_point(data=df_opt, mapping=aes(x='x', y='y'), shape=21, size=4.0, fill='red', color='black')
+
+    p += scale_color_pubr(palette)
+
+    theme_obj = ggtheme if ggtheme is not None else theme_pubr()
+    if not show_legend:
+        theme_obj += theme(legend_position='none')
+    p += theme_obj
+
+    default_title = "ROC Curve Analysis" if plot_type == "roc" else "Precision-Recall Curve"
+    default_xlab = "False Positive Rate (1 - Specificity)" if plot_type == "roc" else "Recall (Sensitivity)"
+    default_ylab = "True Positive Rate (Sensitivity)" if plot_type == "roc" else "Precision"
+
+    p += ggtitle(title or (f"{default_title}: {', '.join(auc_texts)}" if show_auc else default_title))
+    p += _xlab(xlab or default_xlab)
+    p += _ylab(ylab or default_ylab)
+
+    return p
+
+visROC = ggroc
+
+
+# ==============================================================================
+# 6. ggdoseresponse / ggic50 — Sigmoidal 4PL Dose-Response Fitting
+# ==============================================================================
+
+def _sigmoidal_4pl(x, bottom, top, log_ic50, hill):
+    return bottom + (top - bottom) / (1.0 + 10.0 ** ((log_ic50 - x) * hill))
+
+
+def sim_doseresponse_data(n_doses=8, n_reps=3, seed=42):
+    """Simulate drug concentration-response assay dataset."""
+    np.random.seed(seed)
+    doses = np.logspace(-9, -4, n_doses)
+    data = []
+    ic50_true = 1e-6
+    for d in doses:
+        log_d = np.log10(d)
+        log_ic50 = np.log10(ic50_true)
+        mean_resp = 5.0 + 90.0 / (1.0 + 10.0 ** (-(log_d - log_ic50)))
+        for _ in range(n_reps):
+            resp = mean_resp + np.random.normal(0, 3.5)
+            data.append({"dose": d, "response": max(0.0, min(100.0, resp)), "drug": "Compound X"})
+    return pd.DataFrame(data)
+
+
+def ggdoseresponse(data=None, dose="dose", response="response", group=None,
+                   log_transform=True, palette="npg", show_ic50=True,
+                   title="Dose-Response IC50 Curve",
+                   xlab="Log10 [Dose] (M)", ylab="Response (%)",
+                   show_legend=True, ggtheme=None):
+    """Create publication-ready Sigmoidal 4PL Dose-Response Curve with automatic IC50/EC50 parameter fitting.
+
+    Parameters
+    ----------
+    data : pd.DataFrame, optional
+        Assay data containing doses and responses. If None, simulated data is used.
+    dose : str
+        Column name for drug doses/concentrations.
+    response : str
+        Column name for measured responses/inhibitions.
+    group : str, optional
+        Column name for multi-drug comparisons.
+    log_transform : bool
+        Whether to transform dose to log10(dose) (default True).
+    palette : str
+        Color palette name (default ``"npg"``).
+    show_ic50 : bool
+        Whether to annotate calculated IC50 values and drop-lines (default True).
+    title, xlab, ylab : str, optional
+        Plot labels.
+    show_legend : bool
+        Whether to show legend.
+    ggtheme : object, optional
+        Custom theme.
+    """
+    if data is None:
+        df = sim_doseresponse_data()
+        group_col = "drug" if group is None and "drug" in df.columns else group
+    else:
+        df = data.copy()
+        group_col = group
+
+    if group_col is None or group_col not in df.columns:
+        df['drug_group'] = 'Sample'
+        group_col = 'drug_group'
+
+    df['log_dose'] = np.log10(df[dose]) if log_transform else df[dose]
+
+    groups = df[group_col].unique().tolist()
+    curve_rows = []
+    points_rows = []
+    ic50_labels = []
+
+    for g in groups:
+        sub = df[df[group_col] == g]
+        x_data = sub['log_dose'].values
+        y_data = sub[response].values
+
+        # Aggregate mean ± SE per dose
+        agg = sub.groupby('log_dose')[response].agg(['mean', 'sem']).reset_index()
+        for _, r in agg.iterrows():
+            points_rows.append({
+                'log_dose': r['log_dose'],
+                'mean': r['mean'],
+                'ymin': r['mean'] - (r['sem'] if pd.notna(r['sem']) else 0),
+                'ymax': r['mean'] + (r['sem'] if pd.notna(r['sem']) else 0),
+                'group': g
+            })
+
+        # Fit 4PL curve
+        try:
+            p0 = [y_data.min(), y_data.max(), x_data.mean(), 1.0]
+            popt, _ = _curve_fit(_sigmoidal_4pl, x_data, y_data, p0=p0, maxfev=5000)
+            x_fit = np.linspace(x_data.min() - 0.2, x_data.max() + 0.2, 100)
+            y_fit = _sigmoidal_4pl(x_fit, *popt)
+            for xf, yf in zip(x_fit, y_fit):
+                curve_rows.append({'log_dose': xf, 'response': yf, 'group': g})
+
+            ic50_val = popt[2]
+            ic50_labels.append(f"{g} IC50 = 10^({ic50_val:.2f})")
+        except Exception:
+            pass
+
+    df_points = pd.DataFrame(points_rows)
+    df_curves = pd.DataFrame(curve_rows)
+
+    p = ggplot()
+    if len(df_curves) > 0:
+        p += geom_line(data=df_curves, mapping=aes(x='log_dose', y='response', color='group'), size=1.2)
+
+    p += geom_errorbar(data=df_points, mapping=aes(x='log_dose', ymin='ymin', ymax='ymax', color='group'), width=0.15)
+    p += geom_point(data=df_points, mapping=aes(x='log_dose', y='mean', color='group'), size=3.0)
+
+    p += scale_color_pubr(palette)
+
+    theme_obj = ggtheme if ggtheme is not None else theme_pubr()
+    if not show_legend:
+        theme_obj += theme(legend_position='none')
+    p += theme_obj
+
+    if title:
+        p += ggtitle(f"{title} ({', '.join(ic50_labels)})" if (show_ic50 and ic50_labels) else title)
+    if xlab:
+        p += _xlab(xlab)
+    if ylab:
+        p += _ylab(ylab)
+
+    return p
+
+ggic50 = ggdoseresponse
+visDoseResponse = ggdoseresponse
+
+
+# ==============================================================================
+# 7. ggwaterfall / visWaterfall — RECIST Tumor Response Waterfall Plot
+# ==============================================================================
+
+def sim_waterfall_data(n_patients=40, seed=42):
+    """Simulate oncology clinical trial tumor burden change dataset."""
+    np.random.seed(seed)
+    changes = np.sort(np.random.uniform(-100, 60, size=n_patients))[::-1]
+    groups = []
+    for c in changes:
+        if c <= -30:
+            groups.append("PR / Partial Response")
+        elif c >= 20:
+            groups.append("PD / Progressive Disease")
+        else:
+            groups.append("SD / Stable Disease")
+    return pd.DataFrame({
+        "patient": [f"Pt_{i+1:02d}" for i in range(n_patients)],
+        "change": changes,
+        "response": groups
+    })
+
+
+def ggwaterfall(data=None, x="patient", y="change", group="response",
+                order="desc", pr_cutoff=-30.0, pd_cutoff=20.0,
+                palette="npg",
+                title="RECIST Tumor Burden Waterfall Plot",
+                xlab="Patients", ylab="Maximum Tumor Change from Baseline (%)",
+                show_legend=True, ggtheme=None):
+    """Create a publication-ready Oncology RECIST Waterfall plot with response cutoff thresholds.
+
+    Parameters
+    ----------
+    data : pd.DataFrame, optional
+        Patient response table. If None, simulated data is used.
+    x : str
+        Column name for patient / sample IDs.
+    y : str
+        Column name for percentage change from baseline.
+    group : str, optional
+        Column name for response categorization or mutation group.
+    order : str
+        Sorting order: ``"desc"`` or ``"asc"`` (default ``"desc"``).
+    pr_cutoff : float
+        Partial response percentage threshold (default -30.0%).
+    pd_cutoff : float
+        Progressive disease percentage threshold (default +20.0%).
+    palette : str
+        Color palette name (default ``"npg"``).
+    title, xlab, ylab : str, optional
+        Plot labels.
+    show_legend : bool
+        Whether to show legend.
+    ggtheme : object, optional
+        Custom theme.
+    """
+    if data is None:
+        df = sim_waterfall_data()
+    else:
+        df = data.copy()
+
+    ascending = (order == "asc")
+    df = df.sort_values(by=y, ascending=ascending).reset_index(drop=True)
+    df['patient_order'] = pd.Categorical(df[x], categories=df[x].tolist(), ordered=True)
+
+    p = ggplot(df, aes(x='patient_order', y=y))
+    if group and group in df.columns:
+        p += geom_bar(aes(fill=group), stat='identity', width=0.8)
+        p += scale_fill_pubr(palette)
+    else:
+        p += geom_bar(stat='identity', fill='#3C5488', width=0.8)
+
+    p += geom_hline(yintercept=0, color='black', size=0.6)
+    if pr_cutoff is not None:
+        p += geom_hline(yintercept=pr_cutoff, linetype="dashed", color="#00A087", size=0.6)
+    if pd_cutoff is not None:
+        p += geom_hline(yintercept=pd_cutoff, linetype="dashed", color="#E64B35", size=0.6)
+
+    theme_obj = ggtheme if ggtheme is not None else theme_pubr()
+    theme_obj += theme(axis_text_x=element_blank(), axis_ticks_x=element_blank())
+    if not show_legend:
+        theme_obj += theme(legend_position='none')
+    p += theme_obj
+
+    if title:
+        p += ggtitle(title)
+    if xlab:
+        p += _xlab(xlab)
+    if ylab:
+        p += _ylab(ylab)
+
+    return p
+
+visWaterfall = ggwaterfall
+
+
+# ==============================================================================
+# 8. ggmanhattan / visManhattan — GWAS Manhattan Plot
+# ==============================================================================
+
+def sim_gwas_data(n_snps=2000, n_chrs=8, seed=42):
+    """Simulate genome-wide association study dataset for Manhattan plot demonstration."""
+    np.random.seed(seed)
+    chrs = []
+    bps = []
+    pvals = []
+    snps = []
+    snps_per_chr = n_snps // n_chrs
+    for c in range(1, n_chrs + 1):
+        for s in range(snps_per_chr):
+            chrs.append(c)
+            bps.append((s + 1) * 25000 + np.random.randint(0, 10000))
+            if c in (2, 6) and s in (25, 26, 27, 80, 81):
+                p = 10 ** (-np.random.uniform(7.5, 14.0))
+            else:
+                p = np.random.uniform(1e-5, 1.0)
+            pvals.append(p)
+            snps.append(f"rs{c*100000 + s:07d}")
+    return pd.DataFrame({"chr": chrs, "bp": bps, "pvalue": pvals, "snp": snps})
+
+
+def ggmanhattan(data=None, chr="chr", bp="bp", p="pvalue", snp="snp",
+                suggestive_line=1e-5, genomewide_line=5e-8,
+                top_snps=5, colors=None,
+                title="GWAS Manhattan Plot", xlab="Chromosome", ylab="-log10(p-value)",
+                show_legend=False, ggtheme=None):
+    """Create a publication-ready GWAS Manhattan Plot with chromosome block coloring and threshold lines.
+
+    Parameters
+    ----------
+    data : pd.DataFrame, optional
+        GWAS results table. If None, simulated data is used.
+    chr : str
+        Column name for chromosome identifiers.
+    bp : str
+        Column name for base-pair positions.
+    p : str
+        Column name for p-values.
+    snp : str, optional
+        Column name for SNP identifiers.
+    suggestive_line : float
+        Suggestive significance threshold (default 1e-5).
+    genomewide_line : float
+        Genome-wide significance threshold (default 5e-8).
+    top_snps : int
+        Number of top significant SNPs to annotate (default 5).
+    colors : list, optional
+        Alternating chromosome colors, e.g. ``["#3C5488", "#4DBBD5"]``.
+    title, xlab, ylab : str, optional
+        Plot labels.
+    show_legend : bool
+        Whether to show legend.
+    ggtheme : object, optional
+        Custom theme.
+    """
+    if data is None:
+        df = sim_gwas_data()
+    else:
+        df = data.copy()
+
+    df['neg_log10_p'] = -np.log10(df[p].replace(0, 1e-300))
+
+    # Calculate cumulative coordinates
+    chr_list = sorted(df[chr].unique())
+    cum_bp = 0
+    chr_offsets = {}
+    chr_centers = {}
+    alt_colors = colors or ["#3C5488", "#4DBBD5"]
+
+    for idx, c in enumerate(chr_list):
+        sub = df[df[chr] == c]
+        min_b, max_b = sub[bp].min(), sub[bp].max()
+        chr_offsets[c] = cum_bp - min_b
+        chr_centers[c] = cum_bp + (max_b - min_b) / 2
+        cum_bp += (max_b - min_b) + 100000
+
+    df['cum_pos'] = df.apply(lambda r: r[bp] + chr_offsets[r[chr]], axis=1)
+    df['chr_color'] = df[chr].apply(lambda c: alt_colors[chr_list.index(c) % len(alt_colors)])
+
+    p_plot = ggplot(df, aes(x='cum_pos', y='neg_log10_p'))
+    p_plot += geom_point(aes(color='chr_color'), size=1.8, alpha=0.8)
+    p_plot += scale_color_identity()
+
+    # Threshold lines
+    if suggestive_line:
+        p_plot += geom_hline(yintercept=-np.log10(suggestive_line), linetype="dashed", color="blue", size=0.5)
+    if genomewide_line:
+        p_plot += geom_hline(yintercept=-np.log10(genomewide_line), linetype="dashed", color="red", size=0.5)
+
+    # Annotate top SNPs
+    if top_snps > 0 and snp and snp in df.columns:
+        top_df = df.sort_values('neg_log10_p', ascending=False).head(top_snps)
+        p_plot += geom_text(data=top_df, mapping=aes(x='cum_pos', y='neg_log10_p', label=snp),
+                            size=7.5, vjust=-0.8, color='black')
+
+    center_breaks = [chr_centers[c] for c in chr_list]
+    center_labels = [str(c) for c in chr_list]
+    p_plot += scale_x_continuous(breaks=center_breaks, labels=center_labels, expand=[0.02, 0.02])
+
+    theme_obj = ggtheme if ggtheme is not None else theme_pubr()
+    p_plot += theme_obj
+
+    if title:
+        p_plot += ggtitle(title)
+    if xlab:
+        p_plot += _xlab(xlab)
+    if ylab:
+        p_plot += _ylab(ylab)
+
+    return p_plot
+
+visManhattan = ggmanhattan
+
+
+# ==============================================================================
+# 9. ggblandaltman / visBlandAltman — Bland-Altman Agreement Plot
+# ==============================================================================
+
+def sim_blandaltman_data(n_samples=100, seed=42):
+    """Simulate method comparison measurement dataset."""
+    np.random.seed(seed)
+    true_vals = np.random.uniform(50, 150, size=n_samples)
+    m1 = true_vals + np.random.normal(0, 4.0, size=n_samples)
+    m2 = true_vals + np.random.normal(1.8, 4.2, size=n_samples)
+    return pd.DataFrame({"Method_A": m1, "Method_B": m2})
+
+
+def ggblandaltman(data=None, x="Method_A", y="Method_B",
+                  percent_diff=False,
+                  point_color="#3C5488", point_size=2.5,
+                  title="Bland-Altman Method Agreement Plot",
+                  xlab="Mean of Two Methods", ylab="Difference (Method A - Method B)",
+                  ggtheme=None):
+    """Create a publication-ready Bland-Altman Agreement Plot with Mean Bias and 95% Limits of Agreement.
+
+    Parameters
+    ----------
+    data : pd.DataFrame, optional
+        Measurements from two methods. If None, simulated data is used.
+    x : str
+        Column name for Method A measurements.
+    y : str
+        Column name for Method B measurements.
+    percent_diff : bool
+        Whether to calculate percentage difference (default False).
+    point_color : str
+        Color of scatter points.
+    point_size : float
+        Size of scatter points.
+    title, xlab, ylab : str, optional
+        Plot labels.
+    ggtheme : object, optional
+        Custom theme.
+    """
+    if data is None:
+        df = sim_blandaltman_data()
+    else:
+        df = data.copy()
+
+    mean_val = (df[x] + df[y]) / 2.0
+    if percent_diff:
+        diff_val = (df[x] - df[y]) / mean_val * 100.0
+    else:
+        diff_val = df[x] - df[y]
+
+    df_plot = pd.DataFrame({'Mean': mean_val, 'Diff': diff_val})
+    bias = diff_val.mean()
+    sd = diff_val.std()
+    upper_loa = bias + 1.96 * sd
+    lower_loa = bias - 1.96 * sd
+
+    p = ggplot(df_plot, aes(x='Mean', y='Diff'))
+    p += geom_point(color=point_color, size=point_size, alpha=0.7)
+
+    # Bias and LOA lines
+    p += geom_hline(yintercept=bias, color="#3C5488", size=0.8)
+    p += geom_hline(yintercept=upper_loa, linetype="dashed", color="#E64B35", size=0.7)
+    p += geom_hline(yintercept=lower_loa, linetype="dashed", color="#E64B35", size=0.7)
+
+    # Annotations
+    max_x = df_plot['Mean'].max() * 0.95
+    p += geom_text(x=max_x, y=bias, label=f"Mean Bias: {bias:.2f}", vjust=-0.5, size=8.0, color="#3C5488")
+    p += geom_text(x=max_x, y=upper_loa, label=f"+1.96 SD: {upper_loa:.2f}", vjust=-0.5, size=8.0, color="#E64B35")
+    p += geom_text(x=max_x, y=lower_loa, label=f"-1.96 SD: {lower_loa:.2f}", vjust=1.3, size=8.0, color="#E64B35")
+
+    theme_obj = ggtheme if ggtheme is not None else theme_pubr()
+    p += theme_obj
+
+    if title:
+        p += ggtitle(title)
+    if xlab:
+        p += _xlab(xlab)
+    if ylab:
+        p += _ylab(ylab)
+
+    return p
+
+visBlandAltman = ggblandaltman
+
+
+# ==============================================================================
+# 10. ggradar / visRadar — Multi-Dimensional Radar / Spider Chart
+# ==============================================================================
+
+def sim_radar_data(n_entities=3, n_metrics=6, seed=42):
+    """Simulate multi-metric profiling dataset for radar charts."""
+    np.random.seed(seed)
+    metrics = [f"Metric {chr(65+i)}" for i in range(n_metrics)]
+    entities = [f"Profile {i+1}" for i in range(n_entities)]
+    rows = []
+    for ent in entities:
+        row = {"entity": ent}
+        for m in metrics:
+            row[m] = np.random.uniform(40, 95)
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def ggradar(data=None, id="entity", metrics=None,
+            max_scale=100.0, palette="npg", alpha=0.25,
+            title="Radar / Spider Profile Comparison",
+            show_legend=True, ggtheme=None):
+    """Create a publication-ready polygonal Radar / Spider Chart for multi-metric comparison.
+
+    Parameters
+    ----------
+    data : pd.DataFrame, optional
+        Wide-format profiling table. If None, simulated data is used.
+    id : str
+        Column name identifying entities / profiles.
+    metrics : list, optional
+        List of numeric metric column names to plot.
+    max_scale : float
+        Maximum scale value (default 100.0).
+    palette : str
+        Color palette name (default ``"npg"``).
+    alpha : float
+        Polygon fill transparency (default 0.25).
+    title : str, optional
+        Plot title.
+    show_legend : bool
+        Whether to show legend.
+    ggtheme : object, optional
+        Custom theme.
+    """
+    if data is None:
+        df = sim_radar_data()
+        id_col = "entity"
+        metric_cols = [c for c in df.columns if c != id_col]
+    else:
+        df = data.copy()
+        id_col = id
+        metric_cols = metrics or [c for c in df.columns if c != id_col and pd.api.types.is_numeric_dtype(df[c])]
+
+    k = len(metric_cols)
+    if k < 3:
+        raise ValueError("Radar chart requires at least 3 metrics.")
+
+    angles = [2 * np.pi * i / k + np.pi / 2 for i in range(k)]
+
+    # 1. Concentric grid polygons (20%, 40%, 60%, 80%, 100%)
+    grid_dfs = []
+    for level in [0.2, 0.4, 0.6, 0.8, 1.0]:
+        gx = [level * np.cos(a) for a in angles] + [level * np.cos(angles[0])]
+        gy = [level * np.sin(a) for a in angles] + [level * np.sin(angles[0])]
+        grid_dfs.append(pd.DataFrame({'x': gx, 'y': gy, 'level': level}))
+
+    # 2. Spoke lines and axis labels
+    spokes = []
+    labels = []
+    for idx, (a, m) in enumerate(zip(angles, metric_cols)):
+        spokes.append({'x': 0.0, 'y': 0.0, 'xend': np.cos(a), 'yend': np.sin(a)})
+        labels.append({'x': 1.15 * np.cos(a), 'y': 1.15 * np.sin(a), 'label': m})
+    df_spokes = pd.DataFrame(spokes)
+    df_labels = pd.DataFrame(labels)
+
+    # 3. Entity Polygons
+    poly_rows = []
+    entities = df[id_col].unique().tolist()
+    for _, row in df.iterrows():
+        ent = row[id_col]
+        vals = [float(row[m]) / max_scale for m in metric_cols]
+        ex = [v * np.cos(a) for v, a in zip(vals, angles)] + [vals[0] * np.cos(angles[0])]
+        ey = [v * np.sin(a) for v, a in zip(vals, angles)] + [vals[0] * np.sin(angles[0])]
+        for x_val, y_val in zip(ex, ey):
+            poly_rows.append({'x': x_val, 'y': y_val, 'entity': ent})
+    df_poly = pd.DataFrame(poly_rows)
+
+    p = ggplot()
+    for gdf in grid_dfs:
+        p += geom_polygon(data=gdf, mapping=aes(x='x', y='y'), fill='#00000000', color='gray80', size=0.4)
+
+    p += geom_segment(data=df_spokes, mapping=aes(x='x', y='y', xend='xend', yend='yend'), color='gray75', size=0.4)
+    p += geom_polygon(data=df_poly, mapping=aes(x='x', y='y', fill='entity'), alpha=alpha)
+    p += geom_line(data=df_poly, mapping=aes(x='x', y='y', color='entity'), size=1.0)
+    p += geom_point(data=df_poly, mapping=aes(x='x', y='y', color='entity'), size=2.5)
+
+    p += geom_text(data=df_labels, mapping=aes(x='x', y='y', label='label'), size=8.0, fontface='bold')
+
+    p += scale_fill_pubr(palette)
+    p += scale_color_pubr(palette)
+    p += theme_void()
+
+    if title:
+        p += ggtitle(title)
+
+    return p
+
+visRadar = ggradar
+
+
+# ==============================================================================
+# 11. ggupset / visUpSet — UpSet Multi-Set Intersection Plot
+# ==============================================================================
+
+def sim_upset_data(seed=42):
+    """Simulate multi-set binary membership dataset for UpSet plot demonstration."""
+    np.random.seed(seed)
+    genes = [f"Gene_{i+1:03d}" for i in range(120)]
+    sets = ["Set A (Immune)", "Set B (Metabolism)", "Set C (Signaling)", "Set D (Stress)"]
+    rows = []
+    for g in genes:
+        row = {"gene": g}
+        for s in sets:
+            row[s] = int(np.random.rand() > 0.6)
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def ggupset(data=None, sets=None, min_size=1, top_n=12,
+            palette="npg", title="UpSet Set Intersections",
+            ggtheme=None):
+    """Create an UpSet plot for visualizing set intersections and overlaps.
+
+    Parameters
+    ----------
+    data : pd.DataFrame, optional
+        Data containing binary/boolean indicator columns for sets. If None, simulated data is used.
+    sets : list, optional
+        List of column names representing sets.
+    min_size : int
+        Minimum intersection count to display (default 1).
+    top_n : int
+        Maximum number of top intersection combinations to display (default 12).
+    palette : str
+        Color palette name (default ``"npg"``).
+    title : str, optional
+        Plot title.
+    ggtheme : object, optional
+        Custom theme.
+    """
+    if data is None:
+        df = sim_upset_data()
+        set_cols = [c for c in df.columns if c != "gene"]
+    else:
+        df = data.copy()
+        set_cols = sets or [c for c in df.columns if df[c].dropna().isin([0, 1, True, False]).all()]
+
+    if len(set_cols) < 2:
+        raise ValueError("UpSet plot requires at least 2 binary set columns.")
+
+    # Calculate combination frequencies
+    comb_counts = df.groupby(set_cols).size().reset_index(name='count')
+    comb_counts = comb_counts[comb_counts[set_cols].sum(axis=1) > 0]
+    comb_counts = comb_counts[comb_counts['count'] >= min_size]
+    comb_counts = comb_counts.sort_values(by='count', ascending=False).head(top_n).reset_index(drop=True)
+
+    n_combs = len(comb_counts)
+    comb_counts['comb_id'] = [f"Comb_{i+1:02d}" for i in range(n_combs)]
+
+    # 1. Top Bar Plot (Intersection Size)
+    p_top = (
+        ggplot(comb_counts, aes(x='comb_id', y='count')) +
+        geom_bar(stat='identity', fill='#3C5488', width=0.65) +
+        geom_text(aes(x='comb_id', y='count', label='count'), vjust=-0.5, size=7.5) +
+        theme_pubr() +
+        theme(axis_text_x=element_blank(), axis_ticks_x=element_blank(), axis_title_x=element_blank()) +
+        _ylab("Intersection Size") +
+        ggtitle(title)
+    )
+
+    # 2. Bottom Dot-Matrix
+    matrix_rows = []
+    segment_rows = []
+
+    for c_idx, row in comb_counts.iterrows():
+        active_y = []
+        for s_idx, s_name in enumerate(set_cols):
+            val = int(row[s_name])
+            matrix_rows.append({
+                'comb_id': row['comb_id'],
+                'set_name': s_name,
+                'x': c_idx + 1,
+                'y': s_idx + 1,
+                'active': val
+            })
+            if val == 1:
+                active_y.append(s_idx + 1)
+        if len(active_y) > 1:
+            segment_rows.append({
+                'x': c_idx + 1,
+                'y': min(active_y),
+                'yend': max(active_y)
+            })
+
+    df_matrix = pd.DataFrame(matrix_rows)
+    df_segments = pd.DataFrame(segment_rows)
+
+    df_active = df_matrix[df_matrix['active'] == 1]
+    df_inactive = df_matrix[df_matrix['active'] == 0]
+
+    p_bottom = ggplot()
+    if len(df_segments) > 0:
+        p_bottom += geom_segment(data=df_segments, mapping=aes(x='x', y='y', xend='x', yend='yend'),
+                                 color='gray30', size=1.5)
+
+    p_bottom += geom_point(data=df_inactive, mapping=aes(x='x', y='y'), color='gray80', size=4.5)
+    p_bottom += geom_point(data=df_active, mapping=aes(x='x', y='y'), color='#3C5488', size=5.5)
+
+    p_bottom += scale_x_continuous(breaks=list(range(1, n_combs + 1)), labels=comb_counts['comb_id'].tolist(), expand=[0.05, 0.05])
+    p_bottom += scale_y_continuous(breaks=list(range(1, len(set_cols) + 1)), labels=set_cols, expand=[0.1, 0.1])
+    p_bottom += theme_pubr()
+    p_bottom += theme(axis_title_x=element_blank(), axis_title_y=element_blank(),
+                      axis_text_x=element_blank(), axis_ticks_x=element_blank())
+
+    combined = gggrid([p_top, p_bottom], ncol=1, heights=[0.6, 0.4], vspace=0)
+    return combined
+
+visUpSet = ggupset
+
 
 
 

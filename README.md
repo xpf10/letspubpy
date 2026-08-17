@@ -8,11 +8,13 @@ A publication-ready plotting library that wraps **Lets-Plot** in Python, mimicki
 
 ## Key Features
 
-- **High-Level Plots**: Build complex boxplots, violin plots, dotplots, line plots, and pie charts with simple, intuitive functions (`ggboxplot`, `ggviolin`, `ggbarplot`, `ggscatter`, `ggpie`, etc.).
+- **High-Level Plots**: Build complex boxplots, violin plots, raincloud plots, dotplots, line plots, and pie charts with simple, intuitive functions (`ggboxplot`, `ggviolin`, `ggraincloud`, `ggbarplot`, `ggscatter`, `ggpie`, etc.).
+- **Omics & Bioinformatics**: Differential expression volcano plots (`ggvolcano`), GWAS Manhattan plots (`ggmanhattan`), UpSet set intersection charts (`ggupset`), GSEA running enrichment score curves (`visGSEA`), pathway enrichment lollipop charts (`visEnrichLollipop`), and clustered pathway-gene concept networks (`visEnrichNetwork` / `cnetplot`).
+- **Clinical & Statistical Modeling**: Kaplan-Meier survival curves with automated log-rank tests and Greenwood 95% CIs (`ggsurvplot`), Meta-analysis / Cox regression forest plots (`ggforest`), ROC & Precision-Recall curves with AUC calculation (`ggroc`), RECIST oncology waterfall plots (`ggwaterfall`), Bland-Altman agreement plots (`ggblandaltman`), and multi-metric radar charts (`ggradar`).
+- **Pharmacology & 4PL Fitting**: Non-linear sigmoidal dose-response IC50/EC50 estimation and visualization (`ggdoseresponse` / `ggic50`).
 - **Heatmaps & Clustered Heatmaps**: Create publication-ready heatmaps with row/column hierarchical clustering, Z-score standardization, value annotations, and journal gradients (`ggheatmap`, `ggclustervis`, `ggclustergram`).
 - **Cluster Expression Dynamics (`visCluster`)**: ClusterGVis-style multi-panel visualization combining clustered heatmaps with smoothed cluster trajectory trend lines.
 - **Single-Cell Pseudotime Heatmaps (`visPseudotime`)**: Monocle-style trajectory heatmaps along cell differentiation continuum with built-in simulation tools.
-- **GSEA & Pathway Enrichment**: GSEA running enrichment score curves with hit barcode heatmap ribbons (`visGSEA`, `blitzgsea_plot`), enrichment lollipop charts (`visEnrichLollipop`), and clustered pathway-gene concept networks (`visEnrichNetwork` / `cnetplot`).
 - **Automatic Statistics (`+ stat_compare_means`)**: Easily calculate and annotate plots with statistical test brackets (Welch's t-test, Mann-Whitney U / Wilcoxon, ANOVA, Kruskal-Wallis) using Python's `scipy.stats`.
 - **Journal Color Palettes**: Directly apply color schemes matching top journals like Nature (`npg`), Science (`aaas`), NEJM (`nejm`), JAMA (`jama`), Lancet (`lancet`), and JCO (`jco`).
 - **Flexible Grid Layouts (`ggarrange`)**: Combine multiple plots into a clean subplot panel with a unified legend.
@@ -197,9 +199,10 @@ p_bw.show()
 All plotting functions support standard parameters (`color`, `fill`, `palette`, `title`, `xlab`, `ylab`, `show_legend`, `ggtheme`):
 - `ggboxplot(data, x, y, notch=False, add="none", ...)`: Create a boxplot. `add` can be `"jitter"`, `"dotplot"`, or `"point"`.
 - `ggviolin(data, x, y, draw_quantiles=None, add="none", ...)`: Create a violin plot. `add` can be `"boxplot"`, `"jitter"`, or `"dotplot"`.
-- `ggbarplot(data, x, y=None, add="none", ...)`: Create a bar chart showing counts (if `y=None`) or group means (if `y` is provided). `add` can be `"mean_se"` or `"mean_sd"` to automatically add error bars.
-- `ggline(data, x, y, add="none", ...)`: Create a line plot of group means. `add` can be `"mean_se"` or `"mean_sd"`.
-- `ggscatter(data, x, y, add="none", ...)`: Create a scatter plot. `add` can be `"reg.line"` to draw a linear regression trend.
+- `ggraincloud(data, x, y, ...)`: Create a modern raincloud plot (half-violin + boxplot + jittered points).
+- `ggbarplot(data, x, y=None, add="none", ...)`: Create a bar chart showing counts or group means with automated error bars (`"mean_se"`, `"mean_sd"`).
+- `ggline(data, x, y, add="none", ...)`: Create a line plot of group means.
+- `ggscatter(data, x, y, add="none", ...)`: Create a scatter plot with regression fits and confidence ellipses.
 - `gghistogram(data, x, y="..count..", bins=30, ...)`: Create a histogram.
 - `ggdensity(data, x, y="..density..", ...)`: Create a density curve.
 - `ggpie(data, x, label, fill=None, hole=0, ...)`: Create a pie chart.
@@ -208,15 +211,26 @@ All plotting functions support standard parameters (`color`, `fill`, `palette`, 
 - `ggecdf(data, x, ...)`: Create an empirical cumulative distribution function (ECDF) plot.
 - `ggcorr(data, method="pearson", digits=2, ...)`: Create a correlation matrix heatmap with significance stars.
 
-### Heatmap & Bioinformatics Visualizations
-- `ggheatmap(data, scale="none", cluster_rows=False, cluster_cols=False, palette="bwr", show_values=False, ...)`: Create a heatmap with optional row/column hierarchical clustering and Z-score scaling.
-- `ggclustervis(data, ...)` / `ggclustergram(data, ...)`: Create a hierarchically clustered heatmap (alias for `ggheatmap` with clustering and row scaling enabled).
-- `visCluster(data, n_clusters=4, plot_type="both", trend_position="left", ...)`: ClusterGVis-style dual view combining clustered heatmaps and cluster expression trend lines.
-- `visPseudotime(data, n_clusters=4, ...)`: Single-cell RNA-seq Monocle-style pseudotime trajectory heatmaps along cell differentiation trajectories.
-- `visGSEA(res_data, term, rnk=None)` / `gsea_plot(...)` / `blitzgsea_plot(...)`: GSEA running enrichment score plot with hit barcode heatmap ribbon and statistical annotations.
-- `visEnrichLollipop(data, top_n=10, x="RichFactor", color_by="p.adjust", size_by="Count", ...)`: Pathway enrichment analysis lollipop chart.
-- `visEnrichNetwork(data, top_n=9, cluster_pathways=True, show_hulls=True, ...)` / `cnetplot(...)`: Clustered pathway-gene concept network with convex hull boundaries and concentric circle legends.
-- `sim_pseudotime_data(...)`, `sim_gsea_data(...)`, `sim_enrichment_data(...)`: Built-in synthetic dataset generators for demonstration and testing.
+### Omics & Bioinformatics Visualizations
+- `ggvolcano(data, fc_cutoff=1.0, p_cutoff=0.05, top_n=10, ...)`: Differential expression volcano plot with threshold lines and top gene labels.
+- `ggmanhattan(data, suggestive_line=1e-5, genomewide_line=5e-8, ...)`: GWAS Manhattan plot with alternating chromosome colors.
+- `ggupset(data, sets=None, min_size=1, top_n=12, ...)`: UpSet plot for multi-set intersection overlaps.
+- `visGSEA(res_data, term, rnk=None)` / `gsea_plot(...)` / `blitzgsea_plot(...)`: GSEA running enrichment score plot with hit barcode heatmap ribbon.
+- `visEnrichLollipop(data, top_n=10, x="RichFactor", ...)`: Pathway enrichment analysis lollipop chart.
+- `visEnrichNetwork(data, top_n=9, cluster_pathways=True, show_hulls=True, ...)` / `cnetplot(...)`: Clustered pathway-gene concept network with convex hull boundaries.
+- `ggheatmap(data, scale="none", cluster_rows=False, cluster_cols=False, ...)`: Heatmap with optional hierarchical clustering and Z-score scaling.
+- `ggclustervis(data, ...)` / `ggclustergram(data, ...)`: Hierarchically clustered heatmap.
+- `visCluster(data, n_clusters=4, plot_type="both", ...)`: ClusterGVis-style dual view (clustered heatmap + trend lines).
+- `visPseudotime(data, n_clusters=4, ...)`: Monocle-style single-cell pseudotime trajectory heatmap.
+
+### Clinical & Statistical Modeling Visualizations
+- `ggsurvplot(data, time="time", status="status", group="group", log_rank=True, conf_int=True, ...)`: Kaplan-Meier survival curves with log-rank test $p$-value and Greenwood 95% CIs.
+- `ggforest(data, study="study", mean="mean", lower="lower", upper="upper", ...)`: Meta-analysis & Cox/Logistic regression forest plot with aligned labels.
+- `ggroc(data, y_true="y_true", y_score="y_score", plot_type="roc", ...)`: ROC & Precision-Recall curves with automated AUC computation and optimal cutoff detection.
+- `ggdoseresponse(data, dose="dose", response="response", ...)` / `ggic50(...)`: Sigmoidal 4PL dose-response IC50/EC50 non-linear curve fitting.
+- `ggwaterfall(data, x="patient", y="change", group="response", ...)`: Oncology RECIST tumor burden waterfall plot.
+- `ggblandaltman(data, x="Method_A", y="Method_B", ...)`: Bland-Altman method agreement plot with Mean Bias and 95% Limits of Agreement.
+- `ggradar(data, id="entity", ...)`: Multi-dimensional polygonal radar / spider chart.
 
 ### Themes & Color Palettes
 - `theme_pubr(base_size=12, base_family=None, legend="top", border=False)`: Custom clean publication-ready theme.

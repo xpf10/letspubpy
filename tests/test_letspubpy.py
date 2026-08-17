@@ -1347,3 +1347,160 @@ def test_rremove_chaining():
                       x="x", y="y", title="T", xlab="X", ylab="Y")
     p2 = lpp.rremove(lpp.rremove(p, "title"), "xlab")
     assert isinstance(p2, lpp.PubPlotSpec)
+
+
+# ==============================================================================
+# Scientific Chart Suite Tests
+# ==============================================================================
+
+def test_ggvolcano():
+    # Test default simulation
+    p = lpp.ggvolcano()
+    assert isinstance(p, (lpp.PubPlotSpec, PlotSpec))
+    
+    # Test custom data
+    df = pd.DataFrame({
+        "gene": ["G1", "G2", "G3", "G4"],
+        "log2FC": [2.5, -2.1, 0.2, -0.1],
+        "pvalue": [0.0001, 0.0002, 0.5, 0.8]
+    })
+    p_custom = lpp.ggvolcano(df, fc_cutoff=1.5, p_cutoff=0.01, top_n=2)
+    assert isinstance(p_custom, (lpp.PubPlotSpec, PlotSpec))
+
+
+def test_ggraincloud():
+    p = lpp.ggraincloud()
+    assert isinstance(p, (lpp.PubPlotSpec, PlotSpec))
+    
+    df = pd.DataFrame({
+        "group": ["A"] * 20 + ["B"] * 20,
+        "value": np.random.normal(5, 1, 40)
+    })
+    p2 = lpp.ggraincloud(df, x="group", y="value", palette="nejm")
+    assert isinstance(p2, (lpp.PubPlotSpec, PlotSpec))
+
+
+def test_ggsurvplot():
+    p = lpp.ggsurvplot()
+    assert isinstance(p, (lpp.PubPlotSpec, PlotSpec))
+    
+    df = pd.DataFrame({
+        "time": [5, 10, 15, 20, 25, 30],
+        "status": [1, 0, 1, 1, 0, 1],
+        "group": ["A", "A", "A", "B", "B", "B"]
+    })
+    p2 = lpp.ggsurvplot(df, time="time", status="status", group="group", conf_int=True)
+    assert isinstance(p2, (lpp.PubPlotSpec, PlotSpec))
+
+
+def test_ggforest():
+    p = lpp.ggforest()
+    assert isinstance(p, (lpp.PubPlotSpec, PlotSpec))
+    
+    df = pd.DataFrame({
+        "study": ["S1", "S2"],
+        "mean": [1.2, 0.8],
+        "lower": [0.9, 0.6],
+        "upper": [1.6, 1.1],
+        "pvalue": [0.03, 0.08],
+        "weight": [100, 150]
+    })
+    p2 = lpp.ggforest(df, weight="weight")
+    assert isinstance(p2, (lpp.PubPlotSpec, PlotSpec))
+
+
+def test_ggroc():
+    p_roc = lpp.ggroc(plot_type="roc")
+    assert isinstance(p_roc, (lpp.PubPlotSpec, PlotSpec))
+    
+    p_prc = lpp.ggroc(plot_type="prc")
+    assert isinstance(p_prc, (lpp.PubPlotSpec, PlotSpec))
+    
+    df = pd.DataFrame({
+        "y_true": [1, 0, 1, 0, 1, 0],
+        "y_score": [0.9, 0.1, 0.8, 0.2, 0.7, 0.3],
+        "model": ["M1", "M1", "M1", "M2", "M2", "M2"]
+    })
+    p3 = lpp.ggroc(df, group="model")
+    assert isinstance(p3, (lpp.PubPlotSpec, PlotSpec))
+
+
+def test_ggdoseresponse():
+    p = lpp.ggdoseresponse()
+    assert isinstance(p, (lpp.PubPlotSpec, PlotSpec))
+    
+    df = pd.DataFrame({
+        "dose": [1e-9, 1e-8, 1e-7, 1e-6, 1e-5],
+        "response": [5.0, 15.0, 50.0, 85.0, 95.0]
+    })
+    p2 = lpp.ggdoseresponse(df, dose="dose", response="response")
+    assert isinstance(p2, (lpp.PubPlotSpec, PlotSpec))
+
+
+def test_ggwaterfall():
+    p = lpp.ggwaterfall()
+    assert isinstance(p, (lpp.PubPlotSpec, PlotSpec))
+    
+    df = pd.DataFrame({
+        "patient": ["P1", "P2", "P3"],
+        "change": [-45.0, 10.0, 35.0],
+        "response": ["PR", "SD", "PD"]
+    })
+    p2 = lpp.ggwaterfall(df, x="patient", y="change", group="response")
+    assert isinstance(p2, (lpp.PubPlotSpec, PlotSpec))
+
+
+def test_ggmanhattan():
+    p = lpp.ggmanhattan()
+    assert isinstance(p, (lpp.PubPlotSpec, PlotSpec))
+    
+    df = pd.DataFrame({
+        "chr": [1, 1, 2, 2],
+        "bp": [1000, 2000, 1000, 2000],
+        "pvalue": [0.05, 1e-9, 0.01, 1e-6],
+        "snp": ["rs1", "rs2", "rs3", "rs4"]
+    })
+    p2 = lpp.ggmanhattan(df, top_snps=2)
+    assert isinstance(p2, (lpp.PubPlotSpec, PlotSpec))
+
+
+def test_ggblandaltman():
+    p = lpp.ggblandaltman()
+    assert isinstance(p, (lpp.PubPlotSpec, PlotSpec))
+    
+    df = pd.DataFrame({
+        "M1": [10.0, 12.0, 15.0, 18.0],
+        "M2": [10.5, 11.8, 15.2, 18.5]
+    })
+    p2 = lpp.ggblandaltman(df, x="M1", y="M2", percent_diff=True)
+    assert isinstance(p2, (lpp.PubPlotSpec, PlotSpec))
+
+
+def test_ggradar():
+    p = lpp.ggradar()
+    assert isinstance(p, (lpp.PubPlotSpec, PlotSpec))
+    
+    df = pd.DataFrame({
+        "entity": ["A", "B"],
+        "M1": [80, 60],
+        "M2": [70, 90],
+        "M3": [85, 75],
+        "M4": [90, 80]
+    })
+    p2 = lpp.ggradar(df, id="entity")
+    assert isinstance(p2, (lpp.PubPlotSpec, PlotSpec))
+
+
+def test_ggupset():
+    p = lpp.ggupset()
+    assert isinstance(p, (SupPlotsSpec, PlotSpec))
+    
+    df = pd.DataFrame({
+        "gene": ["g1", "g2", "g3", "g4"],
+        "Set1": [1, 1, 0, 0],
+        "Set2": [1, 0, 1, 0],
+        "Set3": [0, 1, 1, 1]
+    })
+    p2 = lpp.ggupset(df, sets=["Set1", "Set2", "Set3"])
+    assert isinstance(p2, (SupPlotsSpec, PlotSpec))
+
